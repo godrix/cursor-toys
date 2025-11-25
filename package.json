@@ -1,0 +1,141 @@
+{
+  "name": "cursor-deeplink",
+  "displayName": "Cursor Deeplink",
+  "description": "Generate and import deeplinks for Cursor commands, rules, and prompts files",
+  "version": "0.1.0",
+  "publisher": "godrix",
+  "icon": "resources/icon.png",
+  "author": {
+    "name": "YOUR_NAME"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/godrix/cursor-deeplink.git"
+  },
+  "bugs": {
+    "url": "https://github.com/godrix/cursor-deeplink/issues"
+  },
+  "homepage": "https://github.com/godrix/cursor-deeplink#readme",
+  "keywords": [
+    "cursor",
+    "deeplink",
+    "commands",
+    "rules",
+    "prompts",
+    "share",
+    "collaboration"
+  ],
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage",
+    "onCommand:cursor-deeplink.generate",
+    "onCommand:cursor-deeplink.generate-command",
+    "onCommand:cursor-deeplink.generate-rule",
+    "onCommand:cursor-deeplink.generate-prompt",
+    "onCommand:cursor-deeplink.import"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "cursor-deeplink.generate",
+        "title": "Generate Cursor Deeplink"
+      },
+      {
+        "command": "cursor-deeplink.generate-command",
+        "title": "Generate Cursor Deeplink Command"
+      },
+      {
+        "command": "cursor-deeplink.generate-rule",
+        "title": "Generate Cursor Deeplink Rule"
+      },
+      {
+        "command": "cursor-deeplink.generate-prompt",
+        "title": "Generate Cursor Deeplink Prompt"
+      },
+      {
+        "command": "cursor-deeplink.import",
+        "title": "Import Cursor Deeplink"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "cursor-deeplink.generate-command",
+          "when": "resourcePath =~ /\\.cursor\\/commands\\//",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cursor-deeplink.generate-rule",
+          "when": "resourcePath =~ /\\.cursor\\/rules\\//",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cursor-deeplink.generate-prompt",
+          "when": "resourcePath =~ /\\.cursor\\/prompts\\//",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cursor-deeplink.generate",
+          "when": "resourcePath =~ /(\\.cursor\\/(commands|rules|prompts)\\/)/",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Cursor Deeplink",
+      "properties": {
+        "cursorDeeplink.linkType": {
+          "type": "string",
+          "enum": [
+            "deeplink",
+            "web"
+          ],
+          "enumDescriptions": [
+            "Use cursor:// protocol (deeplink)",
+            "Use web URL https://cursor.com/link/"
+          ],
+          "default": "deeplink",
+          "description": "Type of link to generate"
+        },
+        "cursorDeeplink.allowedExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "md",
+            "mdc"
+          ],
+          "description": "Allowed file extensions (without the dot, e.g., md, mdc, txt, json). For rules, .mdc is recommended to support metadata."
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "cursor-deeplink.import",
+        "key": "ctrl+shift+i",
+        "mac": "cmd+shift+i"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "16.x",
+    "typescript": "^4.9.4"
+  }
+}
+
