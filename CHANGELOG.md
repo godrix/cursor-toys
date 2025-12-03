@@ -2,6 +2,20 @@
 
 All notable changes to the "Cursor Commands Share" extension will be documented in this file.
 
+## [0.5.1] - 2025-12-02
+
+### Added
+- **Configurable Personal Commands View**: New `cursorDeeplink.personalCommandsView` setting to choose which command folders to display in the Personal Commands tree view
+  - `both`: Show commands from both `.cursor/commands/` and `.claude/commands/` folders (default)
+  - `cursor`: Show commands from `.cursor/commands/` folder only
+  - `claude`: Show commands from `.claude/commands/` folder only
+
+### Changed
+- **Enhanced Tree View**: Personal Commands tree view now supports displaying commands from multiple folders simultaneously
+- **Improved File Watchers**: File system watchers now monitor all configured command folders for real-time updates
+- **Fixed Reveal Command**: Changed `revealInExplorer` to `revealFileInOS` for better cross-platform compatibility
+- Tree view no longer auto-creates folders that aren't configured to be shown
+
 ## [0.5.0] - 2025-12-02
 
 ### Changed
