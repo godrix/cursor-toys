@@ -4,6 +4,17 @@ A VS Code/Cursor extension designed to **simplify and accelerate the sharing** o
 
 **Share your custom instructions, commands, and rules with your team or community in seconds\!**
 
+## 🎬 Visual Demo
+
+### Share Commands and Generate Deeplinks
+![Share Command and Generate Deeplink](.github/assets/share-command-and-generate-deeplink.gif)
+
+### Import Commands, Rules, and Prompts
+![Import Commands, Rules, and Prompts](.github/assets/import-commands-rules-prompts.gif)
+
+### Personal Commands Tree View
+![Personal Commands Tree View](.github/assets/personal-commands-view-tree.gif)
+
 ## Purpose: Simplified Collaboration and Sharing
 
 This extension turns your Cursor configuration files into sharable assets, greatly enhancing **collaboration** and **knowledge replication**. It achieves this by:
@@ -18,6 +29,9 @@ Deeplinks are the ideal tool to ensure everyone on your team uses the exact same
 ## ✨ What's New in v0.4.0
 
 ### Personal Commands Management
+
+![Personal Commands Tree View](.github/assets/personal-commands-view-tree.gif)
+
 - **Tree View Interface**: New "Personal Commands" sidebar view to browse and manage your user commands from `~/.cursor/commands/` or `~/.claude/commands/`
 - **Visual Command Management**: Manage personal commands directly from the tree view with actions to:
   - Open command files
@@ -65,6 +79,8 @@ Deeplinks are the ideal tool to ensure everyone on your team uses the exact same
 
 ### Generating Share Links
 
+![Share Command and Generate Deeplink](.github/assets/share-command-and-generate-deeplink.gif)
+
 #### Method 1: Context Menu (Recommended for Quick Generation)
 
 1.  Navigate to the configuration file you wish to share:
@@ -81,6 +97,8 @@ Deeplinks are the ideal tool to ensure everyone on your team uses the exact same
 3.  The deeplink will be generated and copied.
 
 ### Importing Shared Links
+
+![Import Commands, Rules, and Prompts](.github/assets/import-commands-rules-prompts.gif)
 
 #### Method 1: Keyboard Shortcut
 
