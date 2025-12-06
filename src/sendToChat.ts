@@ -1,0 +1,74 @@
+import * as vscode from 'vscode';
+
+const DEEPLINK_BASE = 'cursor://anysphere.cursor-deeplink/prompt';
+export const MAX_DEEPLINK_LENGTH = 8000;
+
+/**
+ * Constrói deeplink para prompt
+ * @param text Texto a ser codificado no deeplink
+ * @returns Deeplink formatado
+ */
+export function buildPromptDeeplink(text: string): string {
+  const encodedText = encodeURIComponent(text);
+  return `${DEEPLINK_BASE}?text=${encodedText}`;
+}
+
+/**
+ * Envia texto diretamente para o chat do Cursor
+ * @param text Texto a ser enviado
+ * @param prompt Prompt opcional para adicionar antes do texto
+ */
+export async function sendToChat(text: string, prompt?: string): Promise<boolean> {
+  try {
+    // Combinar prompt e texto se fornecido
+    const fullText = prompt 
+      ? `${prompt}\n\n---\n\n${text}`
+      : text;
+
+    // Validar tamanho
+    const deeplink = buildPromptDeeplink(fullText);
+    if (deeplink.length > MAX_DEEPLINK_LENGTH) {
+      vscode.window.showErrorMessage(
+        `Texto muito longo (${deeplink.length} caracteres). Limite: ${MAX_DEEPLINK_LENGTH} caracteres.`
+      );
+      return false;
+    }
+
+    // Abrir deeplink
+    await vscode.env.openExternal(vscode.Uri.parse(deeplink));
+    vscode.window.showInformationMessage('Enviado para o chat do Cursor!');
+    return true;
+  } catch (error) {
+    vscode.window.showErrorMessage(`Erro ao enviar para o chat: ${error}`);
+    return false;
+  }
+}
+
+/**
+ * Envia seleção atual do editor para o chat
+ */
+export async function sendSelectionToChat(prompt?: string): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    vscode.window.showErrorMessage('Nenhum editor ativo');
+    return;
+  }
+
+  const selection = editor.selection;
+  const selectedText = editor.document.getText(selection);
+
+  if (!selectedText.trim()) {
+    vscode.window.showWarningMessage('Nenhum texto selecionado');
+    return;
+  }
+
+  // Incluir contexto do arquivo
+  const fileName = editor.document.fileName;
+  const language = editor.document.languageId;
+  const contextPrompt = prompt 
+    ? `${prompt}\n\nArquivo: ${fileName}\nLinguagem: ${language}\n\n---\n\n`
+    : `Arquivo: ${fileName}\nLinguagem: ${language}\n\n---\n\n`;
+
+  await sendToChat(selectedText, contextPrompt);
+}
+

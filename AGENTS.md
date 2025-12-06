@@ -17,6 +17,7 @@ src/              # Código fonte TypeScript
   ├── deeplinkGenerator.ts   # Geração de deeplinks
   ├── deeplinkImporter.ts    # Importação de deeplinks
   ├── codelensProvider.ts    # Provider de CodeLens
+  ├── userCommandsTreeProvider.ts  # Tree Provider para comandos pessoais
   └── utils.ts               # Funções utilitárias
 out/              # Código compilado (gerado automaticamente)
 resources/        # Recursos estáticos (ícones, etc.)
@@ -59,6 +60,7 @@ export async function functionName(param: Type): Promise<ReturnType> {
 - **deeplinkGenerator.ts**: Lógica de geração de deeplinks
 - **deeplinkImporter.ts**: Lógica de importação e criação de arquivos
 - **codelensProvider.ts**: Implementação do CodeLens
+- **userCommandsTreeProvider.ts**: Tree Provider para visualização de comandos pessoais
 - **utils.ts**: Funções utilitárias reutilizáveis
 
 ### Tratamento de Erros
@@ -104,6 +106,14 @@ export async function functionName(param: Type): Promise<ReturnType> {
 - Atualizar CodeLens quando configurações mudarem
 - Mostrar apenas em arquivos válidos (`.cursor/` ou `.claude/` folders)
 - Validar extensões permitidas antes de exibir
+
+### Tree Provider
+- Implementar `vscode.TreeDataProvider` para comandos pessoais
+- Atualizar tree quando arquivos mudarem (usar FileSystemWatcher)
+- Filtrar arquivos por extensões permitidas
+- Ordenar itens alfabeticamente
+- Criar diretórios automaticamente se não existirem
+- Suportar múltiplas pastas baseado em configuração (`personalCommandsView`)
 
 ## Padrões de Integração
 
@@ -174,9 +184,12 @@ export async function functionName(param: Type): Promise<ReturnType> {
 - `cursorDeeplink.customBaseUrl`: URL base customizada
 - `cursorDeeplink.allowedExtensions`: Extensões permitidas
 - `cursorDeeplink.commandsFolder`: Pasta de comandos (`cursor` ou `claude`)
+- `cursorDeeplink.personalCommandsView`: Exibir comandos de (`both`, `cursor`, `claude`)
 
 ### Ativação
 - Ativar em `onLanguage` e `onCommand`
 - Registrar CodeLens provider para todos os arquivos
+- Registrar Tree Provider para visualização de comandos pessoais
 - Comandos disponíveis via Command Palette e Context Menu
+- FileSystemWatcher para atualizar tree quando arquivos mudarem
 

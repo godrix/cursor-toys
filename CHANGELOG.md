@@ -1,6 +1,24 @@
 # Change Log
 
-All notable changes to the "Cursor Commands Share" extension will be documented in this file.
+All notable changes to the "Cursor Toys" extension will be documented in this file.
+
+## [0.6.0] - 2025-01-XX
+
+### Added
+- **Chat Integration**: New commands to send code and text directly to Cursor chat
+  - `cursor-toys.sendToChat`: Send custom text to Cursor chat
+  - `cursor-toys.sendSelectionToChat`: Send selected code to Cursor chat with context
+- **Annotation Panel**: New Webview Panel that opens via deeplinks (similar to Datadog extension)
+  - Opens via `cursor://godrix.cursor-deeplink/annotation?...` deeplinks
+  - Displays code, errors, and context in a formatted view
+  - "Fix in Chat" button to send content directly to Cursor chat
+- **URI Handler**: Registered custom protocol handler for `cursor://godrix.cursor-deeplink/*` and `vscode://godrix.cursor-deeplink/*`
+- **Context Menu Integration**: Right-click on selected code to send to chat
+
+### Changed
+- **Extension Rebranding**: Renamed extension from "Cursor Commands Share" to "Cursor Sidekick", and later to "Cursor Toys"
+- Updated all user-facing text, command titles, and documentation to reflect the new name
+- Maintained backward compatibility with existing command IDs and configuration keys
 
 ## [0.5.1] - 2025-12-02
 

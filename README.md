@@ -1,4 +1,4 @@
-# Cursor Commands Share Extension 🔗 Share Your Configurations
+# Cursor Toys Extension 🤖 Your AI Coding Assistant
 
 A VS Code/Cursor extension designed to **simplify and accelerate the sharing** of your custom Cursor configurations (commands, rules, and prompts) through easy-to-generate and easy-to-import deeplinks.
 
@@ -65,7 +65,7 @@ Deeplinks are the ideal tool to ensure everyone on your team uses the exact same
 
 - **VS Code Marketplace**: [Install from Visual Studio Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Godrix.cursor-deeplink)
 - **Open VSX (Cursor/other editors)**: [Install via Open VSX Registry](https://open-vsx.org/extension/godrix/cursor-deeplink)
-- **Cursor Store**: Search for "Cursor Commands Share" directly inside Cursor's extension store
+- **Cursor Store**: Search for "Cursor Toys" directly inside Cursor's extension store
 
 ### Manual Install via VSIX
 
@@ -87,7 +87,7 @@ Deeplinks are the ideal tool to ensure everyone on your team uses the exact same
       * `.cursor/commands/` or `.claude/commands/` (for Commands)
       * `.cursor/rules/` (for Rules)
       * `.cursor/prompts/` (for Prompts)
-2.  **Right-click** the file and select the specific **"Generate Cursor Commands Share..."** option (e.g., "Generate Cursor Commands Share Command").
+2.  **Right-click** the file and select the specific **"Generate Cursor Toys..."** option (e.g., "Generate Cursor Toys Command").
 3.  The share link will be **automatically copied to your clipboard**.
 
 #### Method 2: CodeLens (Direct In-File Access)
@@ -112,7 +112,7 @@ Deeplinks are the ideal tool to ensure everyone on your team uses the exact same
 #### Method 2: Command Palette
 
 1.  Press `Cmd+Shift+P` (Mac) or `Ctrl+Shift+P` (Windows/Linux).
-2.  Type **"Import Cursor Commands Share"**.
+2.  Type **"Import Cursor Toys"**.
 3.  Paste the deeplink, and for commands, choose the save location.
 4.  The file will be created.
 
@@ -121,7 +121,7 @@ Deeplinks are the ideal tool to ensure everyone on your team uses the exact same
 You can move existing project commands to your personal commands folder so they're available across all projects:
 
 1.  Right-click on any file in `.cursor/commands/` or `.claude/commands/` folder.
-2.  Select **"Cursor Commands Share"** submenu.
+2.  Select **"Cursor Toys"** submenu.
 3.  Choose **"Save as User Command"**.
 4.  The command will be copied to `~/.cursor/commands/` or `~/.claude/commands/` (based on your configuration) and you'll be asked if you want to remove the original file from the workspace.
 
@@ -201,12 +201,14 @@ This will make the extension save imported commands to `.claude/commands/` inste
 
 | Command | Description (Focus on Sharing) | Shortcut |
 | :--- | :--- | :--- |
-| `cursor-deeplink.generate` | Generate share link (opens type selector) | - |
-| `cursor-deeplink.generate-command` | Generate command share link | - |
-| `cursor-deeplink.generate-rule` | Generate rule share link | - |
-| `cursor-deeplink.generate-prompt` | Generate prompt share link | - |
-| `cursor-deeplink.import` | **Import** share link to create file | `Ctrl+Shift+I` / `Cmd+Shift+I` |
-| `cursor-deeplink.save-as-user-command` | Save project command as user command (available in all projects) | - |
+| `cursor-toys.generate` | Generate share link (opens type selector) | - |
+| `cursor-toys.generate-command` | Generate command share link | - |
+| `cursor-toys.generate-rule` | Generate rule share link | - |
+| `cursor-toys.generate-prompt` | Generate prompt share link | - |
+| `cursor-toys.import` | **Import** share link to create file | `Ctrl+Shift+I` / `Cmd+Shift+I` |
+| `cursor-toys.save-as-user-command` | Save project command as user command (available in all projects) | - |
+| `cursor-toys.sendToChat` | Send custom text to Cursor chat | - |
+| `cursor-toys.sendSelectionToChat` | Send selected code to Cursor chat | - |
 
 -----
 

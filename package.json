@@ -1,8 +1,8 @@
 {
   "name": "cursor-deeplink",
-  "displayName": "Cursor Commands Share",
-  "description": "Generate and import deeplinks for Cursor commands, rules, and prompts files",
-  "version": "0.5.1",
+  "displayName": "Cursor Toys",
+  "description": "Your AI coding assistant - Generate and import deeplinks for Cursor commands, rules, and prompts files, send code to chat, and more",
+  "version": "0.6.0",
   "publisher": "godrix",
   "icon": "resources/icon.png",
   "author": {
@@ -34,72 +34,95 @@
   ],
   "activationEvents": [
     "onLanguage",
-    "onCommand:cursor-deeplink.generate",
-    "onCommand:cursor-deeplink.generate-command",
-    "onCommand:cursor-deeplink.generate-rule",
-    "onCommand:cursor-deeplink.generate-prompt",
-    "onCommand:cursor-deeplink.import",
-    "onCommand:cursor-deeplink.save-as-user-command",
-    "onView:cursor-deeplink.userCommands"
+    "onUri",
+    "onCommand:cursor-toys.generate",
+    "onCommand:cursor-toys.generate-command",
+    "onCommand:cursor-toys.generate-rule",
+    "onCommand:cursor-toys.generate-prompt",
+    "onCommand:cursor-toys.import",
+    "onCommand:cursor-toys.save-as-user-command",
+    "onView:cursor-deeplink.userCommands",
+    "onCommand:cursor-toys.sendToChat",
+    "onCommand:cursor-toys.sendSelectionToChat",
+    "onCommand:cursor-toys.copySelectionAsPrompt"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "cursor-deeplink.generate",
-        "title": "Generate Cursor Commands Share"
+        "command": "cursor-toys.generate",
+        "title": "Generate Cursor Toys"
       },
       {
-        "command": "cursor-deeplink.generate-command",
-        "title": "Generate Cursor Commands Share Command"
+        "command": "cursor-toys.generate-command",
+        "title": "Generate Cursor Toys Command"
       },
       {
-        "command": "cursor-deeplink.generate-rule",
-        "title": "Generate Cursor Commands Share Rule"
+        "command": "cursor-toys.generate-rule",
+        "title": "Generate Cursor Toys Rule"
       },
       {
-        "command": "cursor-deeplink.generate-prompt",
-        "title": "Generate Cursor Commands Share Prompt"
+        "command": "cursor-toys.generate-prompt",
+        "title": "Generate Cursor Toys Prompt"
       },
       {
-        "command": "cursor-deeplink.import",
-        "title": "Import Cursor Commands Share"
+        "command": "cursor-toys.import",
+        "title": "Import Cursor Toys"
       },
       {
-        "command": "cursor-deeplink.save-as-user-command",
+        "command": "cursor-toys.save-as-user-command",
         "title": "Save as User Command"
       },
       {
-        "command": "cursor-deeplink.openUserCommand",
+        "command": "cursor-toys.openUserCommand",
         "title": "Open Command",
         "icon": "$(file)"
       },
       {
-        "command": "cursor-deeplink.generateUserCommandDeeplink",
+        "command": "cursor-toys.generateUserCommandDeeplink",
         "title": "Generate Deeplink"
       },
       {
-        "command": "cursor-deeplink.deleteUserCommand",
+        "command": "cursor-toys.deleteUserCommand",
         "title": "Delete Command"
       },
       {
-        "command": "cursor-deeplink.revealUserCommand",
+        "command": "cursor-toys.revealUserCommand",
         "title": "Reveal in Folder"
       },
       {
-        "command": "cursor-deeplink.renameUserCommand",
+        "command": "cursor-toys.renameUserCommand",
         "title": "Rename Command"
       },
       {
-        "command": "cursor-deeplink.refreshUserCommands",
+        "command": "cursor-toys.refreshUserCommands",
         "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "cursor-toys.sendToChat",
+        "title": "Send to Chat",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "cursor-toys.sendSelectionToChat",
+        "title": "Send Selection to Chat",
+        "icon": "$(send)"
+      },
+      {
+        "command": "cursor-toys.copySelectionAsPrompt",
+        "title": "Copy as Prompt Deeplink",
+        "icon": "$(copy)"
       }
     ],
     "submenus": [
       {
         "id": "cursor-deeplink",
-        "label": "Cursor Commands Share"
+        "label": "Cursor Toys"
+      },
+      {
+        "id": "cursor-toys-selection",
+        "label": "Cursor Toys"
       }
     ],
     "views": {
@@ -121,63 +144,86 @@
       ],
       "view/title": [
         {
-          "command": "cursor-deeplink.refreshUserCommands",
+          "command": "cursor-toys.refreshUserCommands",
           "when": "view == cursor-deeplink.userCommands",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
-          "command": "cursor-deeplink.openUserCommand",
+          "command": "cursor-toys.openUserCommand",
           "when": "view == cursor-deeplink.userCommands && viewItem == userCommandFile",
           "group": "inline"
         },
         {
-          "command": "cursor-deeplink.generateUserCommandDeeplink",
+          "command": "cursor-toys.generateUserCommandDeeplink",
           "when": "view == cursor-deeplink.userCommands && viewItem == userCommandFile",
           "group": "1_actions"
         },
         {
-          "command": "cursor-deeplink.renameUserCommand",
+          "command": "cursor-toys.renameUserCommand",
           "when": "view == cursor-deeplink.userCommands && viewItem == userCommandFile",
           "group": "1_actions"
         },
         {
-          "command": "cursor-deeplink.revealUserCommand",
+          "command": "cursor-toys.revealUserCommand",
           "when": "view == cursor-deeplink.userCommands && viewItem == userCommandFile",
           "group": "1_actions"
         },
         {
-          "command": "cursor-deeplink.deleteUserCommand",
+          "command": "cursor-toys.deleteUserCommand",
           "when": "view == cursor-deeplink.userCommands && viewItem == userCommandFile",
           "group": "2_actions"
         }
       ],
       "cursor-deeplink": [
         {
-          "command": "cursor-deeplink.generate-command",
+          "command": "cursor-toys.generate-command",
           "when": "resourcePath =~ /\\.(cursor|claude)\\/commands\\//"
         },
         {
-          "command": "cursor-deeplink.generate-rule",
+          "command": "cursor-toys.generate-rule",
           "when": "resourcePath =~ /\\.cursor\\/rules\\//"
         },
         {
-          "command": "cursor-deeplink.generate-prompt",
+          "command": "cursor-toys.generate-prompt",
           "when": "resourcePath =~ /\\.cursor\\/prompts\\//"
         },
         {
-          "command": "cursor-deeplink.generate",
+          "command": "cursor-toys.generate",
           "when": "resourcePath =~ /(\\.(cursor|claude)\\/(commands|rules|prompts)\\/)/"
         },
         {
-          "command": "cursor-deeplink.save-as-user-command",
+          "command": "cursor-toys.save-as-user-command",
           "when": "resourcePath =~ /\\.(cursor|claude)\\/commands\\//"
+        }
+      ],
+      "editor/context": [
+        {
+          "submenu": "cursor-toys-selection",
+          "when": "editorHasSelection",
+          "group": "navigation"
+        }
+      ],
+      "cursor-toys-selection": [
+        {
+          "command": "cursor-toys.sendSelectionToChat",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "cursor-toys.copySelectionAsPrompt",
+          "when": "editorHasSelection"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "cursor-toys.sendSelectionToChat",
+          "when": "editorHasSelection"
         }
       ]
     },
     "configuration": {
-      "title": "Cursor Commands Share",
+      "title": "Cursor Toys",
       "properties": {
         "cursorDeeplink.linkType": {
           "type": "string",
@@ -242,9 +288,21 @@
     },
     "keybindings": [
       {
-        "command": "cursor-deeplink.import",
+        "command": "cursor-toys.import",
         "key": "ctrl+shift+i",
         "mac": "cmd+shift+i"
+      }
+    ],
+    "uriHandlers": [
+      {
+        "id": "cursor-deeplink",
+        "scheme": "cursor",
+        "host": "godrix.cursor-deeplink"
+      },
+      {
+        "id": "vscode-cursor-deeplink",
+        "scheme": "vscode",
+        "host": "godrix.cursor-deeplink"
       }
     ]
   },

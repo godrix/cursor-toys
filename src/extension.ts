@@ -5,6 +5,8 @@ import { importDeeplink } from './deeplinkImporter';
 import { getFileTypeFromPath, isAllowedExtension, getUserHomePath, getCommandsPath, getCommandsFolderName, sanitizeFileName, getPersonalCommandsPaths } from './utils';
 import { DeeplinkCodeLensProvider } from './codelensProvider';
 import { UserCommandsTreeProvider, CommandFileItem } from './userCommandsTreeProvider';
+import { sendToChat, sendSelectionToChat, buildPromptDeeplink, MAX_DEEPLINK_LENGTH } from './sendToChat';
+import { AnnotationPanel, AnnotationParams } from './annotationPanel';
 
 /**
  * Helper function to generate deeplink with validations
@@ -57,7 +59,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Generic command to generate deeplink (opens selector)
   const generateCommand = vscode.commands.registerCommand(
-    'cursor-deeplink.generate',
+    'cursor-toys.generate',
     async (uri?: vscode.Uri) => {
       const fileType = await vscode.window.showQuickPick(
         [
@@ -78,7 +80,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Specific command to generate command deeplink
   const generateCommandSpecific = vscode.commands.registerCommand(
-    'cursor-deeplink.generate-command',
+    'cursor-toys.generate-command',
     async (uri?: vscode.Uri) => {
       await generateDeeplinkWithValidation(uri, 'command');
     }
@@ -86,7 +88,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Specific command to generate rule deeplink
   const generateRuleSpecific = vscode.commands.registerCommand(
-    'cursor-deeplink.generate-rule',
+    'cursor-toys.generate-rule',
     async (uri?: vscode.Uri) => {
       await generateDeeplinkWithValidation(uri, 'rule');
     }
@@ -94,7 +96,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Specific command to generate prompt deeplink
   const generatePromptSpecific = vscode.commands.registerCommand(
-    'cursor-deeplink.generate-prompt',
+    'cursor-toys.generate-prompt',
     async (uri?: vscode.Uri) => {
       await generateDeeplinkWithValidation(uri, 'prompt');
     }
@@ -102,7 +104,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to import deeplink
   const importCommand = vscode.commands.registerCommand(
-    'cursor-deeplink.import',
+    'cursor-toys.import',
     async () => {
       const url = await vscode.window.showInputBox({
         prompt: 'Paste the Cursor deeplink',
@@ -126,7 +128,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to save command file as user command (in ~/.cursor/commands)
   const saveAsUserCommand = vscode.commands.registerCommand(
-    'cursor-deeplink.save-as-user-command',
+    'cursor-toys.save-as-user-command',
     async (uri?: vscode.Uri) => {
       try {
         // Get file URI
@@ -282,7 +284,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to open user command file
   const openUserCommand = vscode.commands.registerCommand(
-    'cursor-deeplink.openUserCommand',
+    'cursor-toys.openUserCommand',
     async (arg?: CommandFileItem | vscode.Uri) => {
       const uri = getUriFromArgument(arg);
       if (!uri) {
@@ -300,7 +302,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to generate deeplink for user command
   const generateUserCommandDeeplink = vscode.commands.registerCommand(
-    'cursor-deeplink.generateUserCommandDeeplink',
+    'cursor-toys.generateUserCommandDeeplink',
     async (arg?: CommandFileItem | vscode.Uri) => {
       const uri = getUriFromArgument(arg);
       if (!uri) {
@@ -313,7 +315,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to delete user command
   const deleteUserCommand = vscode.commands.registerCommand(
-    'cursor-deeplink.deleteUserCommand',
+    'cursor-toys.deleteUserCommand',
     async (arg?: CommandFileItem | vscode.Uri) => {
       const uri = getUriFromArgument(arg);
       if (!uri) {
@@ -341,7 +343,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to reveal user command in folder
   const revealUserCommand = vscode.commands.registerCommand(
-    'cursor-deeplink.revealUserCommand',
+    'cursor-toys.revealUserCommand',
     async (arg?: CommandFileItem | vscode.Uri) => {
       const uri = getUriFromArgument(arg);
       if (!uri) {
@@ -358,7 +360,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to rename user command
   const renameUserCommand = vscode.commands.registerCommand(
-    'cursor-deeplink.renameUserCommand',
+    'cursor-toys.renameUserCommand',
     async (arg?: CommandFileItem | vscode.Uri) => {
       const uri = getUriFromArgument(arg);
       if (!uri) {
@@ -439,11 +441,118 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to refresh user commands tree
   const refreshUserCommands = vscode.commands.registerCommand(
-    'cursor-deeplink.refreshUserCommands',
+    'cursor-toys.refreshUserCommands',
     () => {
       userCommandsTreeProvider.refresh();
     }
   );
+
+  // Command to send text to chat
+  const sendToChatCommand = vscode.commands.registerCommand(
+    'cursor-toys.sendToChat',
+    async () => {
+      const text = await vscode.window.showInputBox({
+        prompt: 'Digite o texto para enviar ao chat do Cursor',
+        placeHolder: 'Texto ou código...'
+      });
+
+      if (text) {
+        await sendToChat(text);
+      }
+    }
+  );
+
+  // Command to send selection to chat
+  const sendSelectionToChatCommand = vscode.commands.registerCommand(
+    'cursor-toys.sendSelectionToChat',
+    async () => {
+      await sendSelectionToChat();
+    }
+  );
+
+  // Command to copy selection as prompt deeplink
+  const copySelectionAsPromptCommand = vscode.commands.registerCommand(
+    'cursor-toys.copySelectionAsPrompt',
+    async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showErrorMessage('Nenhum editor ativo');
+        return;
+      }
+
+      const selection = editor.selection;
+      const selectedText = editor.document.getText(selection);
+
+      if (!selectedText.trim()) {
+        vscode.window.showWarningMessage('Nenhum texto selecionado');
+        return;
+      }
+
+      try {
+        // Incluir contexto do arquivo (similar ao sendSelectionToChat)
+        const fileUri = editor.document.uri;
+        const language = editor.document.languageId;
+        const lineStart = selection.start.line + 1; // Linha baseada em 1
+        const lineEnd = selection.end.line + 1;
+        const lineInfo = lineStart === lineEnd 
+          ? `Line: ${lineStart}`
+          : `Lines: ${lineStart}-${lineEnd}`;
+        
+        // Obter caminho relativo ao workspace se disponível
+        let filePath: string;
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
+        if (workspaceFolder) {
+          const relativePath = path.relative(workspaceFolder.uri.fsPath, fileUri.fsPath);
+          // Normalizar separadores de caminho para compatibilidade cross-platform
+          filePath = relativePath.replace(/\\/g, '/');
+        } else {
+          // Se não houver workspace, usar apenas o nome do arquivo
+          filePath = path.basename(fileUri.fsPath);
+        }
+        
+        // Construir texto com contexto
+        const contextInfo = `File: ${filePath}\nLanguage: ${language}\n${lineInfo}\n\n---\n\n`;
+        const fullText = contextInfo + selectedText;
+
+        // Gerar deeplink de prompt com contexto
+        const deeplink = buildPromptDeeplink(fullText);
+        
+        // Validar tamanho
+        if (deeplink.length > MAX_DEEPLINK_LENGTH) {
+          vscode.window.showErrorMessage(
+            `Texto muito longo (${deeplink.length} caracteres). Limite: ${MAX_DEEPLINK_LENGTH} caracteres.`
+          );
+          return;
+        }
+
+        // Copiar para área de transferência
+        await vscode.env.clipboard.writeText(deeplink);
+        vscode.window.showInformationMessage('Deeplink de prompt copiado para a área de transferência!');
+      } catch (error) {
+        vscode.window.showErrorMessage(`Erro ao copiar deeplink: ${error}`);
+      }
+    }
+  );
+
+  // Register URI Handler for cursor://godrix.cursor-deeplink/* and vscode://godrix.cursor-deeplink/* deeplinks
+  const uriHandler = vscode.window.registerUriHandler({
+    handleUri(uri: vscode.Uri) {
+      // Suporta ambos os formatos:
+      // - cursor://godrix.cursor-deeplink/annotation?...
+      // - vscode://godrix.cursor-deeplink/annotation?...
+      const isAnnotationPath = uri.path === '/annotation' || uri.path === 'annotation';
+      
+      if (isAnnotationPath) {
+        const params: AnnotationParams = {};
+        const query = new URLSearchParams(uri.query);
+        query.forEach((value, key) => {
+          params[key] = value;
+        });
+        
+        AnnotationPanel.createOrShow(params);
+      }
+    }
+  });
 
   // File system watchers to update tree when files change
   // Create watchers for all folders that might be watched
@@ -510,7 +619,11 @@ export function activate(context: vscode.ExtensionContext) {
     revealUserCommand,
     renameUserCommand,
     refreshUserCommands,
-    configWatcher
+    configWatcher,
+    sendToChatCommand,
+    sendSelectionToChatCommand,
+    copySelectionAsPromptCommand,
+    uriHandler
   );
 }
 
