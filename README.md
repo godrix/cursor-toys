@@ -231,6 +231,9 @@ You can move existing project commands to your personal commands folder so they'
 
 **Test APIs without leaving your editor.** Execute HTTP requests directly from your workspace with full syntax highlighting, automatic response formatting, and performance tracking.
 
+### Visual Demo
+![Send HTTP Request](.github/assets/send-request.gif)
+
 ### Creating HTTP Request Files
 
 **Important**: HTTP request files must be located in the `.cursor/http/` folder (or subfolders within it) to be recognized by the extension.
