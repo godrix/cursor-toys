@@ -18,9 +18,11 @@ src/              # Código fonte TypeScript
   ├── deeplinkImporter.ts    # Importação de deeplinks
   ├── codelensProvider.ts    # Provider de CodeLens
   ├── userCommandsTreeProvider.ts  # Tree Provider para comandos pessoais
+  ├── telemetry.ts           # Sistema de analytics e telemetria
   └── utils.ts               # Funções utilitárias
 out/              # Código compilado (gerado automaticamente)
 resources/        # Recursos estáticos (ícones, etc.)
+ANALYTICS.md      # Documentação completa do sistema de analytics
 ```
 
 ## Convenções de Código
@@ -61,6 +63,7 @@ export async function functionName(param: Type): Promise<ReturnType> {
 - **deeplinkImporter.ts**: Lógica de importação e criação de arquivos
 - **codelensProvider.ts**: Implementação do CodeLens
 - **userCommandsTreeProvider.ts**: Tree Provider para visualização de comandos pessoais
+- **telemetry.ts**: Sistema de analytics e rastreamento de uso (ver ANALYTICS.md)
 - **utils.ts**: Funções utilitárias reutilizáveis
 
 ### Tratamento de Erros
@@ -187,9 +190,64 @@ export async function functionName(param: Type): Promise<ReturnType> {
 - `cursorDeeplink.personalCommandsView`: Exibir comandos de (`both`, `cursor`, `claude`)
 
 ### Ativação
-- Ativar em `onLanguage` e `onCommand`
+- Ativar usando `onStartupFinished` para garantir que todos os comandos estejam disponíveis
+  - **IMPORTANTE**: Usar `onStartupFinished` em vez de `onCommand` individual ou `*`
+  - `onStartupFinished` ativa após o VS Code terminar de inicializar (melhor performance que `*`)
+  - Garante que comandos não retornem "command not found" ao usar extensão instalada via VSIX
 - Registrar CodeLens provider para todos os arquivos
 - Registrar Tree Provider para visualização de comandos pessoais
 - Comandos disponíveis via Command Palette e Context Menu
 - FileSystemWatcher para atualizar tree quando arquivos mudarem
+- Inicializar telemetria na ativação da extensão
+
+## Analytics e Telemetria
+
+A extensão possui um sistema completo de analytics que rastreia o uso de recursos pelos usuários.
+
+### Características
+- ✅ **Respeita privacidade**: Obedece automaticamente configurações do VS Code (`telemetry.telemetryLevel`)
+- ✅ **Nativo**: Usa VS Code Telemetry API (prática recomendada)
+- ✅ **Seguro**: Dados anonimizados e agregados, sem informações pessoais
+- ✅ **Não invasivo**: Não impacta performance da extensão
+
+### Eventos Rastreados
+- Execução de comandos
+- Geração e importação de deeplinks
+- Cliques em CodeLens
+- Ações em comandos pessoais (abrir, deletar, renomear, etc.)
+- Envio de texto/seleção para chat
+- Requisições HTTP
+- Mudanças de configuração
+- Erros e exceções
+
+### Como Usar
+```typescript
+// Importar TelemetryManager
+import { TelemetryManager } from './telemetry';
+
+// Rastrear um comando
+const telemetry = TelemetryManager.getInstance();
+telemetry.trackCommand('nome-do-comando', { 
+  propriedade: 'valor' 
+});
+
+// Rastrear geração de deeplink
+telemetry.trackDeeplinkGeneration('command', 'deeplink', 'md', true);
+
+// Rastrear erros
+telemetry.trackError('TipoDeErro', 'Mensagem do erro', { 
+  contexto: 'adicional' 
+});
+```
+
+### Documentação Completa
+Para detalhes completos sobre o sistema de analytics, incluindo:
+- Lista completa de eventos rastreados
+- Como visualizar analytics (Application Insights, backend customizado)
+- Métricas importantes a monitorar
+- Integração com Azure Application Insights
+- Privacidade e GDPR
+- Como adicionar novos eventos
+
+**Consulte**: [`ANALYTICS.md`](./ANALYTICS.md)
 
