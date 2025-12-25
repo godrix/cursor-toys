@@ -2,6 +2,62 @@
 
 All notable changes to the "Cursor Toys" extension will be documented in this file.
 
+## [0.7.0] - 2025-12-25
+
+### Added
+- **HTTP Request Execution**: New feature to execute HTTP requests directly from your editor
+  - Create `.req` or `.request` files in `.cursor/http/` folder with curl commands or JSON format
+  - Execute requests with a single click via CodeLens "Send Request" links
+  - Support for multiple requests in a single file using markdown sections (## Section Title)
+  - Each section gets its own "Send Request" CodeLens for individual execution
+  - Automatic response handling with formatted output
+  - Responses saved to `.res` or `.response` files (or shown in preview mode)
+  - Full syntax highlighting for both HTTP request and response files
+  - Execution time tracking displayed in response tabs
+  - Flexible request formats: curl commands and structured JSON
+  - Smart response formatting: automatically formats JSON and XML responses
+- **HTTP Request Configuration**: New settings for HTTP request behavior
+  - `cursorDeeplink.httpRequestTimeout`: Timeout in seconds for HTTP requests (default: 10)
+  - `cursorDeeplink.httpRequestSaveFile`: Save HTTP response to file or show preview only (default: false)
+- **Language Support**: New language definitions and syntax highlighting
+  - `http-request` language for `.req` and `.request` files
+  - `http-response` language for `.res` and `.response` files
+  - TextMate grammar files for proper syntax highlighting
+- **New Command**: `cursor-commands-toys.sendHttpRequest` to execute HTTP requests from files
+- **HTTP CodeLens Provider**: Dedicated CodeLens provider for HTTP request files
+  - Shows "Send Request" links at the top of request files
+  - Shows "Send Request: [Section Title]" links for each markdown section in multi-request files
+  - Only active for files in `.cursor/http/` folder
+- **Custom Response Tab Titles**: Response tabs display execution time in the title (e.g., "response (1.23s).res")
+
+### Changed
+- **Version**: Bumped to 0.7.0 to reflect major new feature addition
+- **Activation Events**: Added `onCommand:cursor-commands-toys.sendHttpRequest` activation event
+- **README**: Extensive documentation updates
+  - Added "What's New" section highlighting HTTP Request Execution feature
+  - Added comprehensive HTTP Request Execution section with examples and usage instructions
+  - Added file location requirements for `.cursor/http/` folder
+  - Added configuration documentation for HTTP request settings
+  - Updated feature list to include HTTP request testing capabilities
+  - Added real-world use case: "API Development Workflow"
+  - Updated available commands table with HTTP request command
+  - Added curl requirement note
+  - Updated configuration options table
+
+### Technical Details
+- **New Files**:
+  - `src/httpCodeLensProvider.ts`: CodeLens provider for HTTP request files
+  - `src/httpRequestExecutor.ts`: Core HTTP request execution logic with curl integration
+  - `syntaxes/http-request.tmLanguage.json`: Syntax highlighting for request files
+  - `syntaxes/http-response.tmLanguage.json`: Syntax highlighting for response files
+- **Enhanced Files**:
+  - `src/extension.ts`: Added HTTP request command registration and providers
+  - `src/utils.ts`: Added utility functions for HTTP request file detection
+  - `package.json`: Added language definitions, grammars, and new configuration options
+
+### Requirements
+- `curl` command-line tool must be installed and available in system PATH
+
 ## [0.6.0] - 2025-12-06
 
 ### Added
