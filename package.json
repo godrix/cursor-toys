@@ -2,7 +2,7 @@
   "name": "cursor-deeplink",
   "displayName": "Cursor Commands Toys",
   "description": "Cursor Commands Toys - Your AI coding assistant toolkit. Generate and import deeplinks for Cursor commands, rules, and prompts files, send code to chat, and more",
-  "version": "0.8.4",
+  "version": "0.9.0",
   "publisher": "godrix",
   "icon": "resources/icon.png",
   "author": {
@@ -41,7 +41,9 @@
     "onCommand:cursor-commands-toys.generate-prompt",
     "onCommand:cursor-commands-toys.import",
     "onCommand:cursor-commands-toys.save-as-user-command",
+    "onCommand:cursor-commands-toys.save-as-user-prompt",
     "onView:cursor-deeplink.userCommands",
+    "onView:cursor-deeplink.userPrompts",
     "onCommand:cursor-commands-toys.sendToChat",
     "onCommand:cursor-commands-toys.sendSelectionToChat",
     "onCommand:cursor-commands-toys.copySelectionAsPrompt",
@@ -75,6 +77,10 @@
         "title": "Save as User Command"
       },
       {
+        "command": "cursor-commands-toys.save-as-user-prompt",
+        "title": "Save as User Prompt"
+      },
+      {
         "command": "cursor-commands-toys.openUserCommand",
         "title": "Open Command",
         "icon": "$(file)"
@@ -97,6 +103,32 @@
       },
       {
         "command": "cursor-commands-toys.refreshUserCommands",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "cursor-commands-toys.openUserPrompt",
+        "title": "Open Prompt",
+        "icon": "$(file)"
+      },
+      {
+        "command": "cursor-commands-toys.generateUserPromptDeeplink",
+        "title": "Generate Deeplink"
+      },
+      {
+        "command": "cursor-commands-toys.deleteUserPrompt",
+        "title": "Delete Prompt"
+      },
+      {
+        "command": "cursor-commands-toys.revealUserPrompt",
+        "title": "Reveal in Folder"
+      },
+      {
+        "command": "cursor-commands-toys.renameUserPrompt",
+        "title": "Rename Prompt"
+      },
+      {
+        "command": "cursor-commands-toys.refreshUserPrompts",
         "title": "Refresh",
         "icon": "$(refresh)"
       },
@@ -137,6 +169,11 @@
           "id": "cursor-deeplink.userCommands",
           "name": "Personal Commands",
           "when": "true"
+        },
+        {
+          "id": "cursor-deeplink.userPrompts",
+          "name": "Personal Prompts",
+          "when": "true"
         }
       ]
     },
@@ -152,6 +189,11 @@
         {
           "command": "cursor-commands-toys.refreshUserCommands",
           "when": "view == cursor-deeplink.userCommands",
+          "group": "navigation"
+        },
+        {
+          "command": "cursor-commands-toys.refreshUserPrompts",
+          "when": "view == cursor-deeplink.userPrompts",
           "group": "navigation"
         }
       ],
@@ -180,6 +222,31 @@
           "command": "cursor-commands-toys.deleteUserCommand",
           "when": "view == cursor-deeplink.userCommands && viewItem == userCommandFile",
           "group": "2_actions"
+        },
+        {
+          "command": "cursor-commands-toys.openUserPrompt",
+          "when": "view == cursor-deeplink.userPrompts && viewItem == userPromptFile",
+          "group": "inline"
+        },
+        {
+          "command": "cursor-commands-toys.generateUserPromptDeeplink",
+          "when": "view == cursor-deeplink.userPrompts && viewItem == userPromptFile",
+          "group": "1_actions"
+        },
+        {
+          "command": "cursor-commands-toys.renameUserPrompt",
+          "when": "view == cursor-deeplink.userPrompts && viewItem == userPromptFile",
+          "group": "1_actions"
+        },
+        {
+          "command": "cursor-commands-toys.revealUserPrompt",
+          "when": "view == cursor-deeplink.userPrompts && viewItem == userPromptFile",
+          "group": "1_actions"
+        },
+        {
+          "command": "cursor-commands-toys.deleteUserPrompt",
+          "when": "view == cursor-deeplink.userPrompts && viewItem == userPromptFile",
+          "group": "2_actions"
         }
       ],
       "cursor-deeplink": [
@@ -202,6 +269,10 @@
         {
           "command": "cursor-commands-toys.save-as-user-command",
           "when": "resourcePath =~ /\\.(cursor|claude)\\/commands\\//"
+        },
+        {
+          "command": "cursor-commands-toys.save-as-user-prompt",
+          "when": "resourcePath =~ /\\.cursor\\/prompts\\//"
         }
       ],
       "editor/context": [
