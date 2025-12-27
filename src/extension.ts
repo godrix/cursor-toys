@@ -2,10 +2,11 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { generateDeeplink } from './deeplinkGenerator';
 import { importDeeplink } from './deeplinkImporter';
-import { getFileTypeFromPath, isAllowedExtension, getUserHomePath, getCommandsPath, getCommandsFolderName, sanitizeFileName, getPersonalCommandsPaths } from './utils';
+import { getFileTypeFromPath, isAllowedExtension, getUserHomePath, getCommandsPath, getCommandsFolderName, sanitizeFileName, getPersonalCommandsPaths, getPromptsPath, getPersonalPromptsPaths } from './utils';
 import { DeeplinkCodeLensProvider } from './codelensProvider';
 import { HttpCodeLensProvider } from './httpCodeLensProvider';
 import { UserCommandsTreeProvider, CommandFileItem } from './userCommandsTreeProvider';
+import { UserPromptsTreeProvider, PromptFileItem } from './userPromptsTreeProvider';
 import { sendToChat, sendSelectionToChat, buildPromptDeeplink, MAX_DEEPLINK_LENGTH } from './sendToChat';
 import { AnnotationPanel, AnnotationParams } from './annotationPanel';
 import { executeHttpRequestFromFile, getExecutionTime } from './httpRequestExecutor';
@@ -292,6 +293,107 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  // Command to save prompt file as user prompt (in ~/.cursor/prompts)
+  const saveAsUserPrompt = vscode.commands.registerCommand(
+    'cursor-commands-toys.save-as-user-prompt',
+    async (uri?: vscode.Uri) => {
+      try {
+        // Get file URI
+        let fileUri: vscode.Uri;
+        if (uri) {
+          fileUri = uri;
+        } else {
+          const editor = vscode.window.activeTextEditor;
+          if (!editor) {
+            vscode.window.showErrorMessage('No file selected');
+            return;
+          }
+          fileUri = editor.document.uri;
+        }
+
+        const filePath = fileUri.fsPath;
+        const normalizedPath = filePath.replace(/\\/g, '/');
+
+        // Verify file is in prompts folder (.cursor/prompts/)
+        if (!normalizedPath.includes('/.cursor/prompts/')) {
+          vscode.window.showErrorMessage('This command can only be used on files in .cursor/prompts/ folder');
+          return;
+        }
+
+        // Get workspace folder
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+          vscode.window.showErrorMessage('No workspace open');
+          return;
+        }
+
+        // Read file content
+        const fileContent = await vscode.workspace.fs.readFile(fileUri);
+        const fileName = path.basename(filePath);
+
+        // Determine destination path (~/.cursor/prompts)
+        const userPromptsPath = getPromptsPath(undefined, true);
+        const destinationUri = vscode.Uri.file(path.join(userPromptsPath, fileName));
+
+        // Check if file already exists in destination
+        let fileExists = false;
+        try {
+          await vscode.workspace.fs.stat(destinationUri);
+          fileExists = true;
+        } catch {
+          // File doesn't exist, that's fine
+        }
+
+        if (fileExists) {
+          const overwrite = await vscode.window.showWarningMessage(
+            `File ${fileName} already exists in ~/.cursor/prompts. Do you want to overwrite it?`,
+            'Yes',
+            'No'
+          );
+          if (overwrite !== 'Yes') {
+            return;
+          }
+        }
+
+        // Create destination folder if it doesn't exist
+        const folderUri = vscode.Uri.file(userPromptsPath);
+        try {
+          await vscode.workspace.fs.stat(folderUri);
+        } catch {
+          // Folder doesn't exist, create it
+          await vscode.workspace.fs.createDirectory(folderUri);
+        }
+
+        // Write file to destination
+        await vscode.workspace.fs.writeFile(destinationUri, fileContent);
+
+        vscode.window.showInformationMessage(`Prompt saved to ~/.cursor/prompts/${fileName}`);
+
+        // Ask if user wants to remove the original file
+        const removeOriginal = await vscode.window.showWarningMessage(
+          'Do you want to remove the original file from the workspace?',
+          'Yes',
+          'No'
+        );
+
+        if (removeOriginal === 'Yes') {
+          try {
+            await vscode.workspace.fs.delete(fileUri);
+            vscode.window.showInformationMessage('Original file removed from workspace');
+          } catch (error) {
+            vscode.window.showErrorMessage(`Error removing original file: ${error}`);
+          }
+        }
+
+        // Open the saved file
+        const document = await vscode.workspace.openTextDocument(destinationUri);
+        await vscode.window.showTextDocument(document);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error saving as user prompt: ${error}`);
+      }
+    }
+  );
+
   // Register User Commands Tree Provider
   const userCommandsTreeProvider = new UserCommandsTreeProvider();
   const userCommandsTreeView = vscode.window.createTreeView('cursor-deeplink.userCommands', {
@@ -513,6 +615,227 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  // Register User Prompts Tree Provider
+  const userPromptsTreeProvider = new UserPromptsTreeProvider();
+  const userPromptsTreeView = vscode.window.createTreeView('cursor-deeplink.userPrompts', {
+    treeDataProvider: userPromptsTreeProvider,
+    showCollapseAll: false,
+    dragAndDropController: userPromptsTreeProvider
+  });
+
+  /**
+   * Helper function to get URI from prompt command argument (can be PromptFileItem or vscode.Uri)
+   */
+  function getPromptUriFromArgument(arg: PromptFileItem | vscode.Uri | undefined): vscode.Uri | null {
+    if (!arg) {
+      return null;
+    }
+    if (arg instanceof vscode.Uri) {
+      return arg;
+    }
+    if ('uri' in arg) {
+      return arg.uri;
+    }
+    return null;
+  }
+
+  /**
+   * Helper function to get file name from prompt command argument
+   */
+  function getPromptFileNameFromArgument(arg: PromptFileItem | vscode.Uri | undefined): string {
+    if (!arg) {
+      return 'file';
+    }
+    if (arg instanceof vscode.Uri) {
+      return path.basename(arg.fsPath);
+    }
+    if ('fileName' in arg) {
+      return arg.fileName;
+    }
+    return 'file';
+  }
+
+  /**
+   * Helper function to get file path from prompt command argument
+   */
+  function getPromptFilePathFromArgument(arg: PromptFileItem | vscode.Uri | undefined): string | null {
+    if (!arg) {
+      return null;
+    }
+    if (arg instanceof vscode.Uri) {
+      return arg.fsPath;
+    }
+    if ('filePath' in arg) {
+      return arg.filePath;
+    }
+    return null;
+  }
+
+  // Command to open user prompt file
+  const openUserPrompt = vscode.commands.registerCommand(
+    'cursor-commands-toys.openUserPrompt',
+    async (arg?: PromptFileItem | vscode.Uri) => {
+      const uri = getPromptUriFromArgument(arg);
+      if (!uri) {
+        vscode.window.showErrorMessage('No file selected');
+        return;
+      }
+      try {
+        const document = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(document);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error opening file: ${error}`);
+      }
+    }
+  );
+
+  // Command to generate deeplink for user prompt
+  const generateUserPromptDeeplink = vscode.commands.registerCommand(
+    'cursor-commands-toys.generateUserPromptDeeplink',
+    async (arg?: PromptFileItem | vscode.Uri) => {
+      const uri = getPromptUriFromArgument(arg);
+      if (!uri) {
+        vscode.window.showErrorMessage('No file selected');
+        return;
+      }
+      await generateDeeplinkWithValidation(uri, 'prompt');
+    }
+  );
+
+  // Command to delete user prompt
+  const deleteUserPrompt = vscode.commands.registerCommand(
+    'cursor-commands-toys.deleteUserPrompt',
+    async (arg?: PromptFileItem | vscode.Uri) => {
+      const uri = getPromptUriFromArgument(arg);
+      if (!uri) {
+        vscode.window.showErrorMessage('No file selected');
+        return;
+      }
+      const fileName = getPromptFileNameFromArgument(arg);
+      const confirm = await vscode.window.showWarningMessage(
+        `Are you sure you want to delete "${fileName}"?`,
+        'Yes',
+        'No'
+      );
+
+      if (confirm === 'Yes') {
+        try {
+          await vscode.workspace.fs.delete(uri);
+          vscode.window.showInformationMessage(`Prompt "${fileName}" deleted`);
+          userPromptsTreeProvider.refresh();
+        } catch (error) {
+          vscode.window.showErrorMessage(`Error deleting file: ${error}`);
+        }
+      }
+    }
+  );
+
+  // Command to reveal user prompt in folder
+  const revealUserPrompt = vscode.commands.registerCommand(
+    'cursor-commands-toys.revealUserPrompt',
+    async (arg?: PromptFileItem | vscode.Uri) => {
+      const uri = getPromptUriFromArgument(arg);
+      if (!uri) {
+        vscode.window.showErrorMessage('No file selected');
+        return;
+      }
+      try {
+        await vscode.commands.executeCommand('revealFileInOS', uri);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error revealing file: ${error}`);
+      }
+    }
+  );
+
+  // Command to rename user prompt
+  const renameUserPrompt = vscode.commands.registerCommand(
+    'cursor-commands-toys.renameUserPrompt',
+    async (arg?: PromptFileItem | vscode.Uri) => {
+      const uri = getPromptUriFromArgument(arg);
+      if (!uri) {
+        vscode.window.showErrorMessage('No file selected');
+        return;
+      }
+      const currentFileName = getPromptFileNameFromArgument(arg);
+      const currentFilePath = getPromptFilePathFromArgument(arg);
+      
+      if (!currentFilePath) {
+        vscode.window.showErrorMessage('Unable to determine file path');
+        return;
+      }
+
+      const config = vscode.workspace.getConfiguration('cursorDeeplink');
+      const allowedExtensions = config.get<string[]>('allowedExtensions', ['md', 'mdc']);
+
+      const newName = await vscode.window.showInputBox({
+        prompt: 'Enter new file name',
+        value: currentFileName,
+        validateInput: (value) => {
+          if (!value || value.trim().length === 0) {
+            return 'File name cannot be empty';
+          }
+
+          // Check if extension is allowed
+          const ext = path.extname(value);
+          const extWithoutDot = ext.startsWith('.') ? ext.substring(1) : ext;
+          if (!allowedExtensions.includes(extWithoutDot.toLowerCase())) {
+            return `Extension must be one of: ${allowedExtensions.join(', ')}`;
+          }
+
+          // Sanitize and check if name is valid
+          const sanitized = sanitizeFileName(value);
+          if (sanitized !== path.parse(value).name) {
+            return 'File name contains invalid characters';
+          }
+
+          // Check if file already exists
+          const newPath = path.join(path.dirname(currentFilePath), value);
+          if (newPath === currentFilePath) {
+            return null; // Same name, no error
+          }
+
+          return null;
+        }
+      });
+
+      if (newName && newName !== currentFileName) {
+        try {
+          const newPath = path.join(path.dirname(currentFilePath), newName);
+          const newUri = vscode.Uri.file(newPath);
+
+          // Check if file already exists
+          try {
+            await vscode.workspace.fs.stat(newUri);
+            const overwrite = await vscode.window.showWarningMessage(
+              `File "${newName}" already exists. Do you want to overwrite it?`,
+              'Yes',
+              'No'
+            );
+            if (overwrite !== 'Yes') {
+              return;
+            }
+          } catch {
+            // File doesn't exist, that's fine
+          }
+
+          await vscode.workspace.fs.rename(uri, newUri, { overwrite: true });
+          vscode.window.showInformationMessage(`Prompt renamed to "${newName}"`);
+          userPromptsTreeProvider.refresh();
+        } catch (error) {
+          vscode.window.showErrorMessage(`Error renaming file: ${error}`);
+        }
+      }
+    }
+  );
+
+  // Command to refresh user prompts tree
+  const refreshUserPrompts = vscode.commands.registerCommand(
+    'cursor-commands-toys.refreshUserPrompts',
+    () => {
+      userPromptsTreeProvider.refresh();
+    }
+  );
+
   // Command to send text to chat
   const sendToChatCommand = vscode.commands.registerCommand(
     'cursor-commands-toys.sendToChat',
@@ -674,6 +997,38 @@ export function activate(context: vscode.ExtensionContext) {
 
   let userCommandsWatchers = createWatchers();
 
+  // File system watchers for prompts folder
+  const createPromptsWatchers = (): vscode.FileSystemWatcher[] => {
+    const watchers: vscode.FileSystemWatcher[] = [];
+    const folderPaths = getPersonalPromptsPaths();
+    
+    for (const folderPath of folderPaths) {
+      const folderUri = vscode.Uri.file(folderPath);
+      const watcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(folderUri, '**/*')
+      );
+
+      watcher.onDidCreate(() => {
+        userPromptsTreeProvider.refresh();
+      });
+
+      watcher.onDidDelete(() => {
+        userPromptsTreeProvider.refresh();
+      });
+
+      watcher.onDidChange(() => {
+        // Optionally refresh on file changes (not just create/delete)
+        // userPromptsTreeProvider.refresh();
+      });
+
+      watchers.push(watcher);
+    }
+    
+    return watchers;
+  };
+
+  let userPromptsWatchers = createPromptsWatchers();
+
   // Watch for configuration changes
   const configWatcher = vscode.workspace.onDidChangeConfiguration((e) => {
     if (e.affectsConfiguration('cursorDeeplink.commandsFolder') || 
@@ -690,6 +1045,9 @@ export function activate(context: vscode.ExtensionContext) {
   userCommandsWatchers.forEach(watcher => {
     context.subscriptions.push(watcher);
   });
+  userPromptsWatchers.forEach(watcher => {
+    context.subscriptions.push(watcher);
+  });
 
   context.subscriptions.push(
     httpResponseProviderDisposable,
@@ -702,6 +1060,7 @@ export function activate(context: vscode.ExtensionContext) {
     generatePromptSpecific,
     importCommand,
     saveAsUserCommand,
+    saveAsUserPrompt,
     userCommandsTreeView,
     openUserCommand,
     generateUserCommandDeeplink,
@@ -709,6 +1068,13 @@ export function activate(context: vscode.ExtensionContext) {
     revealUserCommand,
     renameUserCommand,
     refreshUserCommands,
+    userPromptsTreeView,
+    openUserPrompt,
+    generateUserPromptDeeplink,
+    deleteUserPrompt,
+    revealUserPrompt,
+    renameUserPrompt,
+    refreshUserPrompts,
     configWatcher,
     sendToChatCommand,
     sendSelectionToChatCommand,
