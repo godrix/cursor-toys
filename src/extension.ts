@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { generateDeeplink } from './deeplinkGenerator';
 import { importDeeplink } from './deeplinkImporter';
+import { generateShareable } from './shareableGenerator';
+import { importShareable } from './shareableImporter';
 import { getFileTypeFromPath, isAllowedExtension, getUserHomePath, getCommandsPath, getCommandsFolderName, sanitizeFileName, getPersonalCommandsPaths, getPromptsPath, getPersonalPromptsPaths, getBaseFolderName, getHttpPath, getEnvironmentsPath } from './utils';
 import { DeeplinkCodeLensProvider } from './codelensProvider';
 import { HttpCodeLensProvider } from './httpCodeLensProvider';
@@ -54,6 +56,47 @@ async function generateDeeplinkWithValidation(
     // Copy to clipboard
     await vscode.env.clipboard.writeText(deeplink);
     vscode.window.showInformationMessage('Deeplink copied to clipboard!');
+  }
+}
+
+/**
+ * Helper function to generate shareable with validations
+ */
+async function generateShareableWithValidation(
+  uri: vscode.Uri | undefined,
+  forcedType?: 'command' | 'rule' | 'prompt'
+): Promise<void> {
+  // If no URI, try to get from active editor
+  let filePath: string;
+  
+  if (uri) {
+    filePath = uri.fsPath;
+  } else {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showErrorMessage('No file selected');
+      return;
+    }
+    filePath = editor.document.uri.fsPath;
+  }
+
+  // Validate extension
+  const config = vscode.workspace.getConfiguration('cursorToys');
+  const allowedExtensions = config.get<string[]>('allowedExtensions', ['md']);
+  
+  if (!isAllowedExtension(filePath, allowedExtensions)) {
+    vscode.window.showErrorMessage(
+      `File extension is not in the allowed extensions list: ${allowedExtensions.join(', ')}`
+    );
+    return;
+  }
+
+  // Generate shareable
+  const shareable = await generateShareable(filePath, forcedType);
+  if (shareable) {
+    // Copy to clipboard
+    await vscode.env.clipboard.writeText(shareable);
+    vscode.window.showInformationMessage('CursorToys shareable copied to clipboard!');
   }
 }
 
@@ -170,27 +213,6 @@ export function activate(context: vscode.ExtensionContext) {
     httpCodeLensProvider
   );
 
-  // Generic command to generate deeplink (opens selector)
-  const generateCommand = vscode.commands.registerCommand(
-    'cursor-toys.generate',
-    async (uri?: vscode.Uri) => {
-      const fileType = await vscode.window.showQuickPick(
-        [
-          { label: 'Command', value: 'command' as const },
-          { label: 'Rule', value: 'rule' as const },
-          { label: 'Prompt', value: 'prompt' as const }
-        ],
-        {
-          placeHolder: 'Select the deeplink type'
-        }
-      );
-
-      if (fileType) {
-        await generateDeeplinkWithValidation(uri, fileType.value);
-      }
-    }
-  );
-
   // Specific command to generate command deeplink
   const generateCommandSpecific = vscode.commands.registerCommand(
     'cursor-toys.generate-command',
@@ -215,26 +237,59 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // Command to import deeplink
+  // Specific command to generate command shareable
+  const generateShareableCommandSpecific = vscode.commands.registerCommand(
+    'cursor-toys.shareAsCursorToysCommand',
+    async (uri?: vscode.Uri) => {
+      await generateShareableWithValidation(uri, 'command');
+    }
+  );
+
+  // Specific command to generate rule shareable
+  const generateShareableRuleSpecific = vscode.commands.registerCommand(
+    'cursor-toys.shareAsCursorToysRule',
+    async (uri?: vscode.Uri) => {
+      await generateShareableWithValidation(uri, 'rule');
+    }
+  );
+
+  // Specific command to generate prompt shareable
+  const generateShareablePromptSpecific = vscode.commands.registerCommand(
+    'cursor-toys.shareAsCursorToysPrompt',
+    async (uri?: vscode.Uri) => {
+      await generateShareableWithValidation(uri, 'prompt');
+    }
+  );
+
+  // Unified command to import both deeplink and shareable
   const importCommand = vscode.commands.registerCommand(
     'cursor-toys.import',
     async () => {
       const url = await vscode.window.showInputBox({
-        prompt: 'Paste the Cursor deeplink',
-        placeHolder: 'cursor://anysphere.cursor-deeplink/... or https://cursor.com/link/...',
+        prompt: 'Paste the Cursor deeplink or CursorToys shareable',
+        placeHolder: 'cursor://... or https://cursor.com/link/... or cursortoys://...',
         validateInput: (value) => {
           if (!value) {
-            return 'Please enter a deeplink';
+            return 'Please enter a link';
           }
-          if (!value.includes('cursor-deeplink') && !value.includes('cursor.com/link')) {
-            return 'Invalid URL. Must be a Cursor deeplink';
+          // Accept both deeplink formats and cursortoys format
+          const isDeeplink = value.includes('cursor-deeplink') || value.includes('cursor.com/link');
+          const isCursorToys = value.startsWith('cursortoys://');
+          
+          if (!isDeeplink && !isCursorToys) {
+            return 'Invalid link. Must be a Cursor deeplink or CursorToys shareable';
           }
           return null;
         }
       });
 
       if (url) {
-        await importDeeplink(url);
+        // Detect type and route to appropriate importer
+        if (url.startsWith('cursortoys://')) {
+          await importShareable(url);
+        } else {
+          await importDeeplink(url);
+        }
       }
     }
   );
@@ -1384,10 +1439,12 @@ export function activate(context: vscode.ExtensionContext) {
     activeEditorChangeDisposable,
     documentChangeDisposable,
     visibleEditorsChangeDisposable,
-    generateCommand,
     generateCommandSpecific,
     generateRuleSpecific,
     generatePromptSpecific,
+    generateShareableCommandSpecific,
+    generateShareableRuleSpecific,
+    generateShareablePromptSpecific,
     importCommand,
     saveAsUserCommand,
     saveAsUserPrompt,

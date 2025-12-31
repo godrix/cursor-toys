@@ -2,6 +2,124 @@
 
 All notable changes to the "CursorToys" extension will be documented in this file.
 
+## [1.1.0] - 2025-12-31
+
+### Added
+
+#### 🔗 **CursorToys Shareable Format**
+- **New Compressed Sharing Format**: Alternative to traditional deeplinks with no URL length limits
+  - `cursortoys://TYPE:filename:compressedData` format
+  - Uses gzip compression + base64 encoding
+  - 60-80% size reduction compared to URL-encoded deeplinks
+  - Perfect for large commands, rules, and prompts
+  - No 8,000 character URL limit
+- **Dual CodeLens**: Files now show both sharing options
+  - "Share as Deeplink" — Traditional cursor:// format
+  - "Share as CursorToys" — New compressed format
+- **New Commands**:
+  - `cursor-toys.shareAsCursorToysCommand`: Generate CursorToys shareable for commands
+  - `cursor-toys.shareAsCursorToysRule`: Generate CursorToys shareable for rules
+  - `cursor-toys.shareAsCursorToysPrompt`: Generate CursorToys shareable for prompts
+- **Automatic Format Detection**: Import command now automatically detects and handles both formats
+  - Supports `cursor://` and `https://cursor.com/link/` deeplinks
+  - Supports `cursortoys://` compressed shareables
+  - Single import command works for all formats
+- **New Shareable Generator**: `src/shareableGenerator.ts`
+  - Compresses file content using gzip
+  - Encodes to base64 for safe transmission
+  - Validates file size (50MB limit for safety)
+  - Builds shareable URL in CursorToys format
+- **New Shareable Importer**: `src/shareableImporter.ts`
+  - Parses CursorToys protocol URLs
+  - Decompresses gzip content
+  - Decodes base64 data
+  - Creates files with proper naming and location
+  - Supports personal and project locations
+
+### Changed
+- **Import Command Enhanced**: `cursor-toys.import` now accepts both deeplink and CursorToys formats
+  - Updated prompt text to reflect dual format support
+  - Updated validation to accept both URL schemes
+  - Automatic routing to appropriate importer based on URL format
+- **CodeLens Provider Updated**: Shows two action buttons instead of one
+  - First button: "Share as Deeplink" (traditional format)
+  - Second button: "Share as CursorToys" (compressed format)
+  - Both buttons appear on line 0 of command/rule/prompt files
+- **Command Titles Updated**: More descriptive command names
+  - "Generate Command Share Link" → "Share as Deeplink (Command)"
+  - "Generate Rule Share Link" → "Share as Deeplink (Rule)"
+  - "Generate Prompt Share Link" → "Share as Deeplink (Prompt)"
+  - Added new "Share as CursorToys" variants for each type
+- **Context Menu Enhanced**: Added CursorToys sharing options
+  - Right-click menu now includes both deeplink and CursorToys options
+  - Organized by file type (command, rule, prompt)
+- **Removed Generic Command**: Removed `cursor-toys.generate` command
+  - Users now choose specific type directly from context menu or CodeLens
+  - Cleaner UX with explicit action names
+
+### Technical Details
+
+#### New Files
+- **`src/shareableGenerator.ts`**: Complete shareable generation system
+  - `generateShareable()`: Main function to create CursorToys shareables
+  - `compressAndEncode()`: Gzip compression + base64 encoding
+  - `buildShareableUrl()`: URL construction for CursorToys protocol
+  - File validation and size checks
+  - Content compression with best compression level
+- **`src/shareableImporter.ts`**: Complete shareable import system
+  - `importShareable()`: Main function to import CursorToys shareables
+  - `parseShareableUrl()`: URL parsing and validation
+  - `decodeAndDecompress()`: Base64 decode + gzip decompression
+  - `getDestinationPath()`: Determine file location (personal vs project)
+  - Type detection (COMMAND, RULE, PROMPT)
+  - File overwrite confirmation
+
+#### Enhanced Files
+- **`src/extension.ts`**:
+  - Added `generateShareableWithValidation()` helper function
+  - Registered three new shareable commands
+  - Enhanced import command to handle both formats
+  - Added shareable disposables to subscriptions
+  - Removed generic generate command
+- **`src/codelensProvider.ts`**:
+  - Refactored to show two CodeLens actions per file
+  - Added deeplink and shareable command pairs
+  - Updated labels for clarity
+  - Both CodeLens appear on line 0
+- **`package.json`**:
+  - Added three new shareable commands to contributions
+  - Added activation events for shareable commands
+  - Added shareable commands to context menus
+  - Removed generic generate command
+  - Updated command titles for consistency
+
+#### Dependencies
+- Uses Node.js built-in `zlib` module for compression/decompression
+- No new external dependencies required
+
+### Format Comparison
+
+| Aspect | Deeplink | CursorToys Shareable |
+|:-------|:---------|:--------------------|
+| **Protocol** | `cursor://` or `https://cursor.com/link/` | `cursortoys://` |
+| **Encoding** | URL encoding | Gzip + Base64 |
+| **Size Limit** | 8,000 characters | No limit (practical limit: 50MB) |
+| **Compression** | None | 60-80% reduction |
+| **Best For** | Small files, quick sharing | Large files, team distribution |
+
+### Use Cases
+
+**Use Deeplinks when:**
+- File is small (< 2KB)
+- Sharing in platforms with URL support
+- Need clickable links in documentation
+
+**Use CursorToys when:**
+- File is large (> 5KB)
+- Deeplink exceeds URL length limit
+- Team sharing via private channels
+- Need maximum compression
+
 ## [Unreleased]
 
 ### Added

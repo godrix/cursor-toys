@@ -36,35 +36,54 @@ export class DeeplinkCodeLensProvider implements vscode.CodeLensProvider {
     }
 
     // Determine the command and text based on type
-    let command: string;
-    let label: string;
+    let deeplinkCommand: string;
+    let shareableCommand: string;
+    let deeplinkLabel: string;
+    let shareableLabel: string;
 
     switch (fileType) {
       case 'command':
-        command = 'cursor-toys.generate-command';
-        label = 'Generate Cursor Toys Command';
+        deeplinkCommand = 'cursor-toys.generate-command';
+        shareableCommand = 'cursor-toys.shareAsCursorToysCommand';
+        deeplinkLabel = 'Share as Deeplink';
+        shareableLabel = 'Share as CursorToys';
         break;
       case 'rule':
-        command = 'cursor-toys.generate-rule';
-        label = 'Generate Cursor Toys Rule';
+        deeplinkCommand = 'cursor-toys.generate-rule';
+        shareableCommand = 'cursor-toys.shareAsCursorToysRule';
+        deeplinkLabel = 'Share as Deeplink';
+        shareableLabel = 'Share as CursorToys';
         break;
       case 'prompt':
-        command = 'cursor-toys.generate-prompt';
-        label = 'Generate Cursor Toys Prompt';
+        deeplinkCommand = 'cursor-toys.generate-prompt';
+        shareableCommand = 'cursor-toys.shareAsCursorToysPrompt';
+        deeplinkLabel = 'Share as Deeplink';
+        shareableLabel = 'Share as CursorToys';
         break;
     }
 
-    // Create CodeLens on the first line (line 0)
-    const codeLens = new vscode.CodeLens(
+    // Create CodeLens for Deeplink on the first line (line 0)
+    const deeplinkCodeLens = new vscode.CodeLens(
       new vscode.Range(0, 0, 0, 0),
       {
-        title: label,
-        command: command,
+        title: deeplinkLabel,
+        command: deeplinkCommand,
         arguments: [document.uri]
       }
     );
 
-    this.codeLenses.push(codeLens);
+    // Create CodeLens for Shareable on the first line (line 0)
+    const shareableCodeLens = new vscode.CodeLens(
+      new vscode.Range(0, 0, 0, 0),
+      {
+        title: shareableLabel,
+        command: shareableCommand,
+        arguments: [document.uri]
+      }
+    );
+
+    this.codeLenses.push(deeplinkCodeLens);
+    this.codeLenses.push(shareableCodeLens);
     return this.codeLenses;
   }
 

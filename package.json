@@ -2,7 +2,7 @@
   "name": "cursor-toys",
   "displayName": "CursorToys",
   "description": "🚀 Supercharge your Cursor AI workflow! Share commands instantly, test APIs in-editor, manage personal libraries, and boost team collaboration. The ultimate productivity toolkit for Cursor users.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "godrix",
   "icon": "resources/icon.png",
   "author": {
@@ -46,10 +46,12 @@
   "activationEvents": [
     "onLanguage",
     "onUri",
-    "onCommand:cursor-toys.generate",
     "onCommand:cursor-toys.generate-command",
     "onCommand:cursor-toys.generate-rule",
     "onCommand:cursor-toys.generate-prompt",
+    "onCommand:cursor-toys.shareAsCursorToysCommand",
+    "onCommand:cursor-toys.shareAsCursorToysRule",
+    "onCommand:cursor-toys.shareAsCursorToysPrompt",
     "onCommand:cursor-toys.import",
     "onCommand:cursor-toys.save-as-user-command",
     "onCommand:cursor-toys.save-as-user-prompt",
@@ -67,24 +69,32 @@
   "contributes": {
     "commands": [
       {
-        "command": "cursor-toys.generate",
-        "title": "CursorToys: Generate Share Link"
-      },
-      {
         "command": "cursor-toys.generate-command",
-        "title": "CursorToys: Generate Command Share Link"
+        "title": "CursorToys: Share as Deeplink (Command)"
       },
       {
         "command": "cursor-toys.generate-rule",
-        "title": "CursorToys: Generate Rule Share Link"
+        "title": "CursorToys: Share as Deeplink (Rule)"
       },
       {
         "command": "cursor-toys.generate-prompt",
-        "title": "CursorToys: Generate Prompt Share Link"
+        "title": "CursorToys: Share as Deeplink (Prompt)"
       },
       {
         "command": "cursor-toys.import",
-        "title": "CursorToys: Import from Share Link"
+        "title": "CursorToys: Import from Link"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysCommand",
+        "title": "CursorToys: Share as CursorToys (Command)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysRule",
+        "title": "CursorToys: Share as CursorToys (Rule)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysPrompt",
+        "title": "CursorToys: Share as CursorToys (Prompt)"
       },
       {
         "command": "cursor-toys.save-as-user-command",
@@ -310,7 +320,19 @@
           "when": "resourcePath =~ /\\.(cursor|claude|vscode|ai)\\/commands\\//"
         },
         {
+          "command": "cursor-toys.shareAsCursorToysCommand",
+          "when": "resourcePath =~ /\\.(cursor|claude|vscode|ai)\\/commands\\//"
+        },
+        {
+          "command": "cursor-toys.save-as-user-command",
+          "when": "resourcePath =~ /\\.(cursor|claude|vscode|ai)\\/commands\\//"
+        },
+        {
           "command": "cursor-toys.generate-rule",
+          "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/rules\\//"
+        },
+        {
+          "command": "cursor-toys.shareAsCursorToysRule",
           "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/rules\\//"
         },
         {
@@ -318,12 +340,8 @@
           "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/prompts\\//"
         },
         {
-          "command": "cursor-toys.generate",
-          "when": "resourcePath =~ /(\\.(cursor|claude|vscode|ai)\\/(commands|rules|prompts)\\/)/"
-        },
-        {
-          "command": "cursor-toys.save-as-user-command",
-          "when": "resourcePath =~ /\\.(cursor|claude|vscode|ai)\\/commands\\//"
+          "command": "cursor-toys.shareAsCursorToysPrompt",
+          "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/prompts\\//"
         },
         {
           "command": "cursor-toys.save-as-user-prompt",

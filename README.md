@@ -6,7 +6,7 @@
 
 **Supercharge your workflow** • **Test APIs in-editor** • **Share instantly** • **Collaborate effortlessly**
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://marketplace.visualstudio.com/items?itemName=Godrix.cursor-toys)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://marketplace.visualstudio.com/items?itemName=Godrix.cursor-toys)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/d/Godrix.cursor-toys.svg)](https://marketplace.visualstudio.com/items?itemName=Godrix.cursor-toys)
 [![Open VSX Downloads](https://img.shields.io/open-vsx/dt/godrix/cursor-toys?label=Open%20VSX%20downloads)](https://open-vsx.org/extension/godrix/cursor-toys)
@@ -74,10 +74,11 @@
 
 **Share AI configurations in one click** — No more screenshots or copy-pasting.
 
-- 🎯 **One-Click Share Links** — Convert commands, rules, and prompts to shareable deeplinks
-- ⌨️ **Fast Import** — `Cmd+Shift+I` to import from any link
-- 🔄 **Multiple Formats** — Deeplink, web URL, or custom protocols
+- 🎯 **One-Click Share Links** — Convert commands, rules, and prompts to shareable deeplinks or CursorToys format
+- ⌨️ **Fast Import** — `Cmd+Shift+I` to import from any link (deeplink or CursorToys)
+- 🔄 **Multiple Formats** — Deeplink, web URL, CursorToys compressed format, or custom protocols
 - 👥 **Team Sync** — Everyone uses the same AI instructions
+- 📦 **CursorToys Format** — New compressed format ideal for large files (no URL length limits)
 
 ### 🌐 In-Editor API Testing
 
@@ -151,17 +152,38 @@
 
 ### 🔗 Sharing Commands
 
-**Right-click any command file** → `CursorToys: Generate Command Share Link`
+**Right-click any command file** → Choose your preferred sharing format:
+
+#### Option 1: Deeplink Format (Traditional)
+**Best for:** Direct sharing in Slack, Discord, or platforms with URL length support
 
 ```bash
-# Share link copied to clipboard!
+# Deeplink copied to clipboard!
 cursor://godrix.cursor-toys/command?text=...
 
 # Or web format
 https://cursor.com/link/command?text=...
 ```
 
+**Limitation:** Maximum 8,000 characters (URL-encoded)
+
+#### Option 2: CursorToys Format (New in v1.1)
+**Best for:** Large files or when deeplinks exceed length limit
+
+```bash
+# CursorToys shareable copied to clipboard!
+cursortoys://COMMAND:filename:compressedData...
+```
+
+**Advantages:**
+- ✅ No URL length limit (uses gzip compression + base64)
+- ✅ Ideal for large commands, rules, and prompts
+- ✅ Smaller size (60-80% compression ratio)
+- ✅ Faster to share and import
+
 **Send to team** → They press `Cmd+Shift+I` → Command imported ✨
+
+**Note:** The extension automatically detects the format when importing.
 
 ### 🌐 HTTP Request Testing
 
@@ -718,11 +740,48 @@ Savings: 15.3KB (68.2%) | Original: 22.4KB → Minified: 7.1KB
 
 Choose the link format that works best for your sharing needs:
 
-| Format | Example | Best For |
-| :--- | :--- | :--- |
-| **Deeplink** | `cursor://godrix.cursor-toys/prompt?text=...` | Direct sharing in Slack, Discord, or other tools that support native links |
-| **Web Link** | `https://cursor.com/link/prompt?text=...` | Blogs, documentation, forums, or any platform requiring HTTP links |
-| **Custom** | `https://example.com/link/prompt?text=...` | Internal systems, custom distribution channels, or branded sharing |
+| Format | Example | Best For | Size Limit |
+| :--- | :--- | :--- | :--- |
+| **Deeplink** | `cursor://godrix.cursor-toys/prompt?text=...` | Direct sharing in Slack, Discord, or other tools that support native links | 8,000 chars (URL-encoded) |
+| **Web Link** | `https://cursor.com/link/prompt?text=...` | Blogs, documentation, forums, or any platform requiring HTTP links | 8,000 chars (URL-encoded) |
+| **CursorToys** | `cursortoys://PROMPT:name:compressedData` | Large files, team sharing, internal distribution | No limit (compressed) |
+| **Custom** | `https://example.com/link/prompt?text=...` | Internal systems, custom distribution channels, or branded sharing | 8,000 chars (URL-encoded) |
+
+### CursorToys Format (New in v1.1)
+
+The **CursorToys format** uses gzip compression and base64 encoding to overcome URL length limitations:
+
+**Format Structure:**
+```
+cursortoys://TYPE:filename:compressedData
+```
+
+**Example:**
+```
+cursortoys://COMMAND:code-review:H4sIAAAAAAAAA...
+```
+
+**Features:**
+- 📦 **Compressed** — Reduces size by 60-80% using gzip
+- ⚡ **Fast** — Smaller payloads mean faster sharing
+- 🚫 **No Limits** — No URL length restrictions
+- 🔒 **Safe** — Base64 encoding ensures compatibility
+
+**How to Use:**
+1. Right-click any command/rule/prompt file
+2. Choose **"Share as CursorToys"** instead of "Share as Deeplink"
+3. Share the `cursortoys://` link
+4. Recipients import with `Cmd+Shift+I` (works automatically)
+
+**Comparison:**
+
+| Metric | Deeplink | CursorToys |
+|:-------|:---------|:-----------|
+| **Size (1KB file)** | ~1,400 chars | ~600 chars |
+| **Size (5KB file)** | ~7,000 chars | ~2,000 chars |
+| **Size (10KB file)** | ❌ Exceeds limit | ~3,500 chars |
+| **Compression** | None | 60-80% |
+| **Import Speed** | Fast | Faster |
 
 ### All Configuration Options
 
@@ -908,11 +967,13 @@ Configure the extension at both workspace and user levels:
 | Command | Description | Shortcut |
 | :--- | :--- | :--- |
 | **Sharing & Import** |
-| CursorToys: Generate Share Link | Generate share link (opens type selector) | - |
-| CursorToys: Generate Command Share Link | Generate command share link | - |
-| CursorToys: Generate Rule Share Link | Generate rule share link | - |
-| CursorToys: Generate Prompt Share Link | Generate prompt share link | - |
-| CursorToys: Import Share Link | Import share link to create file | `Ctrl+Shift+I` / `Cmd+Shift+I` |
+| CursorToys: Share as Deeplink (Command) | Generate deeplink for command | - |
+| CursorToys: Share as Deeplink (Rule) | Generate deeplink for rule | - |
+| CursorToys: Share as Deeplink (Prompt) | Generate deeplink for prompt | - |
+| CursorToys: Share as CursorToys (Command) | Generate CursorToys compressed shareable for command | - |
+| CursorToys: Share as CursorToys (Rule) | Generate CursorToys compressed shareable for rule | - |
+| CursorToys: Share as CursorToys (Prompt) | Generate CursorToys compressed shareable for prompt | - |
+| CursorToys: Import from Link | Import deeplink or CursorToys shareable to create file | `Ctrl+Shift+I` / `Cmd+Shift+I` |
 | CursorToys: Save as User Command | Save project command as personal command | - |
 | CursorToys: Save as User Prompt | Save project prompt as personal prompt | - |
 | **HTTP Requests** |
