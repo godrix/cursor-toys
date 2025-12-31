@@ -2,14 +2,18 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { generateDeeplink } from './deeplinkGenerator';
 import { importDeeplink } from './deeplinkImporter';
-import { getFileTypeFromPath, isAllowedExtension, getUserHomePath, getCommandsPath, getCommandsFolderName, sanitizeFileName, getPersonalCommandsPaths, getPromptsPath, getPersonalPromptsPaths } from './utils';
+import { getFileTypeFromPath, isAllowedExtension, getUserHomePath, getCommandsPath, getCommandsFolderName, sanitizeFileName, getPersonalCommandsPaths, getPromptsPath, getPersonalPromptsPaths, getBaseFolderName, getHttpPath, getEnvironmentsPath } from './utils';
 import { DeeplinkCodeLensProvider } from './codelensProvider';
 import { HttpCodeLensProvider } from './httpCodeLensProvider';
 import { UserCommandsTreeProvider, CommandFileItem } from './userCommandsTreeProvider';
 import { UserPromptsTreeProvider, PromptFileItem } from './userPromptsTreeProvider';
 import { sendToChat, sendSelectionToChat, buildPromptDeeplink, MAX_DEEPLINK_LENGTH } from './sendToChat';
 import { AnnotationPanel, AnnotationParams } from './annotationPanel';
-import { executeHttpRequestFromFile, getExecutionTime } from './httpRequestExecutor';
+import { executeHttpRequestFromFile, getExecutionTime, copyCurlCommand } from './httpRequestExecutor';
+import { EnvironmentManager } from './environmentManager';
+import { HttpVariableHoverProvider, HttpEnvironmentCompletionProvider, HttpEnvironmentDecorationProvider } from './httpEnvironmentProviders';
+import { minifyFile, formatMinificationStats, detectFileType } from './minifier';
+import { trimClipboardAuto, trimClipboardWithPrompt } from './clipboardProcessor';
 import * as fs from 'fs';
 
 /**
@@ -34,7 +38,7 @@ async function generateDeeplinkWithValidation(
   }
 
   // Validate extension
-  const config = vscode.workspace.getConfiguration('cursorDeeplink');
+  const config = vscode.workspace.getConfiguration('cursorToys');
   const allowedExtensions = config.get<string[]>('allowedExtensions', ['md']);
   
   if (!isAllowedExtension(filePath, allowedExtensions)) {
@@ -54,6 +58,49 @@ async function generateDeeplinkWithValidation(
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  // Initialize Environment Manager
+  const envManager = EnvironmentManager.getInstance();
+  
+  // Register HTTP environment providers
+  const httpHoverProvider = new HttpVariableHoverProvider();
+  const httpHoverDisposable = vscode.languages.registerHoverProvider(
+    { pattern: '**/*.{req,request}' },
+    httpHoverProvider
+  );
+
+  const httpCompletionProvider = new HttpEnvironmentCompletionProvider();
+  const httpCompletionDisposable = vscode.languages.registerCompletionItemProvider(
+    { pattern: '**/*.{req,request}' },
+    httpCompletionProvider,
+    ' ' // Trigger on space after @env
+  );
+
+  // Register environment decorator provider
+  const decorationProvider = new HttpEnvironmentDecorationProvider();
+  
+  // Update decorations when editor changes
+  const updateDecorations = () => {
+    decorationProvider.updateDecorations();
+  };
+
+  // Initial decoration
+  updateDecorations();
+
+  // Update on active editor change
+  const activeEditorChangeDisposable = vscode.window.onDidChangeActiveTextEditor(() => {
+    decorationProvider.triggerUpdateDecorations();
+  });
+
+  // Update on document change
+  const documentChangeDisposable = vscode.workspace.onDidChangeTextDocument(() => {
+    decorationProvider.triggerUpdateDecorations();
+  });
+
+  // Update on visible editors change
+  const visibleEditorsChangeDisposable = vscode.window.onDidChangeVisibleTextEditors(() => {
+    decorationProvider.triggerUpdateDecorations();
+  });
+  
   // Register HTTP Response Content Provider for custom tab titles
   const httpResponseProvider = new (class implements vscode.TextDocumentContentProvider {
     provideTextDocumentContent(uri: vscode.Uri): string {
@@ -125,7 +172,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Generic command to generate deeplink (opens selector)
   const generateCommand = vscode.commands.registerCommand(
-    'cursor-commands-toys.generate',
+    'cursor-toys.generate',
     async (uri?: vscode.Uri) => {
       const fileType = await vscode.window.showQuickPick(
         [
@@ -146,7 +193,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Specific command to generate command deeplink
   const generateCommandSpecific = vscode.commands.registerCommand(
-    'cursor-commands-toys.generate-command',
+    'cursor-toys.generate-command',
     async (uri?: vscode.Uri) => {
       await generateDeeplinkWithValidation(uri, 'command');
     }
@@ -154,7 +201,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Specific command to generate rule deeplink
   const generateRuleSpecific = vscode.commands.registerCommand(
-    'cursor-commands-toys.generate-rule',
+    'cursor-toys.generate-rule',
     async (uri?: vscode.Uri) => {
       await generateDeeplinkWithValidation(uri, 'rule');
     }
@@ -162,7 +209,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Specific command to generate prompt deeplink
   const generatePromptSpecific = vscode.commands.registerCommand(
-    'cursor-commands-toys.generate-prompt',
+    'cursor-toys.generate-prompt',
     async (uri?: vscode.Uri) => {
       await generateDeeplinkWithValidation(uri, 'prompt');
     }
@@ -170,7 +217,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to import deeplink
   const importCommand = vscode.commands.registerCommand(
-    'cursor-commands-toys.import',
+    'cursor-toys.import',
     async () => {
       const url = await vscode.window.showInputBox({
         prompt: 'Paste the Cursor deeplink',
@@ -194,7 +241,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to save command file as user command (in ~/.cursor/commands)
   const saveAsUserCommand = vscode.commands.registerCommand(
-    'cursor-commands-toys.save-as-user-command',
+    'cursor-toys.save-as-user-command',
     async (uri?: vscode.Uri) => {
       try {
         // Get file URI
@@ -213,9 +260,14 @@ export function activate(context: vscode.ExtensionContext) {
         const filePath = fileUri.fsPath;
         const normalizedPath = filePath.replace(/\\/g, '/');
 
-        // Verify file is in commands folder (either .cursor/commands/ or .claude/commands/)
-        if (!normalizedPath.includes('/.cursor/commands/') && !normalizedPath.includes('/.claude/commands/')) {
-          vscode.window.showErrorMessage('This command can only be used on files in .cursor/commands/ or .claude/commands/ folder');
+        // Verify file is in commands folder (supports .cursor, .claude, or custom base folder)
+        const baseFolderName = getBaseFolderName();
+        const isInCommandsFolder = normalizedPath.includes('/.cursor/commands/') || 
+                                   normalizedPath.includes('/.claude/commands/') ||
+                                   normalizedPath.includes(`/.${baseFolderName}/commands/`);
+        
+        if (!isInCommandsFolder) {
+          vscode.window.showErrorMessage('This command can only be used on files in commands folder');
           return;
         }
 
@@ -295,7 +347,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to save prompt file as user prompt (in ~/.cursor/prompts)
   const saveAsUserPrompt = vscode.commands.registerCommand(
-    'cursor-commands-toys.save-as-user-prompt',
+    'cursor-toys.save-as-user-prompt',
     async (uri?: vscode.Uri) => {
       try {
         // Get file URI
@@ -314,9 +366,11 @@ export function activate(context: vscode.ExtensionContext) {
         const filePath = fileUri.fsPath;
         const normalizedPath = filePath.replace(/\\/g, '/');
 
-        // Verify file is in prompts folder (.cursor/prompts/)
-        if (!normalizedPath.includes('/.cursor/prompts/')) {
-          vscode.window.showErrorMessage('This command can only be used on files in .cursor/prompts/ folder');
+        // Verify file is in prompts folder
+        const baseFolderName = getBaseFolderName();
+        if (!normalizedPath.includes(`/.${baseFolderName}/prompts/`) && 
+            !normalizedPath.includes('/.cursor/prompts/')) {
+          vscode.window.showErrorMessage('This command can only be used on files in prompts folder');
           return;
         }
 
@@ -396,7 +450,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Register User Commands Tree Provider
   const userCommandsTreeProvider = new UserCommandsTreeProvider();
-  const userCommandsTreeView = vscode.window.createTreeView('cursor-deeplink.userCommands', {
+  const userCommandsTreeView = vscode.window.createTreeView('cursor-toys.userCommands', {
     treeDataProvider: userCommandsTreeProvider,
     showCollapseAll: false,
     dragAndDropController: userCommandsTreeProvider
@@ -452,7 +506,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to open user command file
   const openUserCommand = vscode.commands.registerCommand(
-    'cursor-commands-toys.openUserCommand',
+    'cursor-toys.openUserCommand',
     async (arg?: CommandFileItem | vscode.Uri) => {
       const uri = getUriFromArgument(arg);
       if (!uri) {
@@ -470,7 +524,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to generate deeplink for user command
   const generateUserCommandDeeplink = vscode.commands.registerCommand(
-    'cursor-commands-toys.generateUserCommandDeeplink',
+    'cursor-toys.generateUserCommandDeeplink',
     async (arg?: CommandFileItem | vscode.Uri) => {
       const uri = getUriFromArgument(arg);
       if (!uri) {
@@ -483,7 +537,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to delete user command
   const deleteUserCommand = vscode.commands.registerCommand(
-    'cursor-commands-toys.deleteUserCommand',
+    'cursor-toys.deleteUserCommand',
     async (arg?: CommandFileItem | vscode.Uri) => {
       const uri = getUriFromArgument(arg);
       if (!uri) {
@@ -511,7 +565,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to reveal user command in folder
   const revealUserCommand = vscode.commands.registerCommand(
-    'cursor-commands-toys.revealUserCommand',
+    'cursor-toys.revealUserCommand',
     async (arg?: CommandFileItem | vscode.Uri) => {
       const uri = getUriFromArgument(arg);
       if (!uri) {
@@ -528,7 +582,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to rename user command
   const renameUserCommand = vscode.commands.registerCommand(
-    'cursor-commands-toys.renameUserCommand',
+    'cursor-toys.renameUserCommand',
     async (arg?: CommandFileItem | vscode.Uri) => {
       const uri = getUriFromArgument(arg);
       if (!uri) {
@@ -543,7 +597,7 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const config = vscode.workspace.getConfiguration('cursorDeeplink');
+      const config = vscode.workspace.getConfiguration('cursorToys');
       const allowedExtensions = config.get<string[]>('allowedExtensions', ['md', 'mdc']);
 
       const newName = await vscode.window.showInputBox({
@@ -609,7 +663,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to refresh user commands tree
   const refreshUserCommands = vscode.commands.registerCommand(
-    'cursor-commands-toys.refreshUserCommands',
+    'cursor-toys.refreshUserCommands',
     () => {
       userCommandsTreeProvider.refresh();
     }
@@ -617,7 +671,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Register User Prompts Tree Provider
   const userPromptsTreeProvider = new UserPromptsTreeProvider();
-  const userPromptsTreeView = vscode.window.createTreeView('cursor-deeplink.userPrompts', {
+  const userPromptsTreeView = vscode.window.createTreeView('cursor-toys.userPrompts', {
     treeDataProvider: userPromptsTreeProvider,
     showCollapseAll: false,
     dragAndDropController: userPromptsTreeProvider
@@ -673,7 +727,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to open user prompt file
   const openUserPrompt = vscode.commands.registerCommand(
-    'cursor-commands-toys.openUserPrompt',
+    'cursor-toys.openUserPrompt',
     async (arg?: PromptFileItem | vscode.Uri) => {
       const uri = getPromptUriFromArgument(arg);
       if (!uri) {
@@ -691,7 +745,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to generate deeplink for user prompt
   const generateUserPromptDeeplink = vscode.commands.registerCommand(
-    'cursor-commands-toys.generateUserPromptDeeplink',
+    'cursor-toys.generateUserPromptDeeplink',
     async (arg?: PromptFileItem | vscode.Uri) => {
       const uri = getPromptUriFromArgument(arg);
       if (!uri) {
@@ -704,7 +758,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to delete user prompt
   const deleteUserPrompt = vscode.commands.registerCommand(
-    'cursor-commands-toys.deleteUserPrompt',
+    'cursor-toys.deleteUserPrompt',
     async (arg?: PromptFileItem | vscode.Uri) => {
       const uri = getPromptUriFromArgument(arg);
       if (!uri) {
@@ -732,7 +786,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to reveal user prompt in folder
   const revealUserPrompt = vscode.commands.registerCommand(
-    'cursor-commands-toys.revealUserPrompt',
+    'cursor-toys.revealUserPrompt',
     async (arg?: PromptFileItem | vscode.Uri) => {
       const uri = getPromptUriFromArgument(arg);
       if (!uri) {
@@ -749,7 +803,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to rename user prompt
   const renameUserPrompt = vscode.commands.registerCommand(
-    'cursor-commands-toys.renameUserPrompt',
+    'cursor-toys.renameUserPrompt',
     async (arg?: PromptFileItem | vscode.Uri) => {
       const uri = getPromptUriFromArgument(arg);
       if (!uri) {
@@ -764,7 +818,7 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const config = vscode.workspace.getConfiguration('cursorDeeplink');
+      const config = vscode.workspace.getConfiguration('cursorToys');
       const allowedExtensions = config.get<string[]>('allowedExtensions', ['md', 'mdc']);
 
       const newName = await vscode.window.showInputBox({
@@ -830,7 +884,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to refresh user prompts tree
   const refreshUserPrompts = vscode.commands.registerCommand(
-    'cursor-commands-toys.refreshUserPrompts',
+    'cursor-toys.refreshUserPrompts',
     () => {
       userPromptsTreeProvider.refresh();
     }
@@ -838,7 +892,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to send text to chat
   const sendToChatCommand = vscode.commands.registerCommand(
-    'cursor-commands-toys.sendToChat',
+    'cursor-toys.sendToChat',
     async () => {
       const text = await vscode.window.showInputBox({
         prompt: 'Digite o texto para enviar ao chat do Cursor',
@@ -853,7 +907,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to send selection to chat
   const sendSelectionToChatCommand = vscode.commands.registerCommand(
-    'cursor-commands-toys.sendSelectionToChat',
+    'cursor-toys.sendSelectionToChat',
     async () => {
       await sendSelectionToChat();
     }
@@ -861,7 +915,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to copy selection as prompt deeplink
   const copySelectionAsPromptCommand = vscode.commands.registerCommand(
-    'cursor-commands-toys.copySelectionAsPrompt',
+    'cursor-toys.copySelectionAsPrompt',
     async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
@@ -925,7 +979,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Command to send HTTP request
   const sendHttpRequestCommand = vscode.commands.registerCommand(
-    'cursor-commands-toys.sendHttpRequest',
+    'cursor-toys.sendHttpRequest',
     async (uri?: vscode.Uri, startLine?: number, endLine?: number, sectionTitle?: string) => {
       let requestUri: vscode.Uri;
       
@@ -944,12 +998,283 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // Register URI Handler for cursor://godrix.cursor-deeplink/* and vscode://godrix.cursor-deeplink/* deeplinks
+  // Command to copy cURL command
+  const copyCurlCommandCommand = vscode.commands.registerCommand(
+    'cursor-toys.copyCurlCommand',
+    async (uri?: vscode.Uri, startLine?: number, endLine?: number) => {
+      let requestUri: vscode.Uri;
+      
+      if (uri) {
+        requestUri = uri;
+      } else {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+          vscode.window.showErrorMessage('No file selected');
+          return;
+        }
+        requestUri = editor.document.uri;
+      }
+
+      await copyCurlCommand(requestUri, startLine, endLine);
+    }
+  );
+
+  // Command to select environment
+  const selectEnvironmentCommand = vscode.commands.registerCommand(
+    'cursor-toys.selectEnvironment',
+    async () => {
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders || workspaceFolders.length === 0) {
+        vscode.window.showErrorMessage('No workspace folder open');
+        return;
+      }
+
+      const workspacePath = workspaceFolders[0].uri.fsPath;
+      const envManager = EnvironmentManager.getInstance();
+      const availableEnvs = envManager.getAvailableEnvironments(workspacePath);
+
+      if (availableEnvs.length === 0) {
+        vscode.window.showWarningMessage(
+          'No environment files found. Right-click on .cursor/http/ folder and select "Create Environments Folder" to set up environment variables.'
+        );
+        return;
+      }
+
+      const activeEnv = envManager.getActiveEnvironment();
+      const items = availableEnvs.map(name => ({
+        label: name,
+        description: name === activeEnv ? '(active)' : '',
+        picked: name === activeEnv
+      }));
+
+      const selected = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Select HTTP environment'
+      });
+
+      if (selected) {
+        envManager.setActiveEnvironment(selected.label);
+        envManager.clearCache(); // Clear cache to reload variables
+        vscode.window.showInformationMessage(`Environment set to: ${selected.label}`);
+      }
+    }
+  );
+
+  // Command to open environments folder
+  const openEnvironmentsCommand = vscode.commands.registerCommand(
+    'cursor-toys.openEnvironments',
+    async () => {
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders || workspaceFolders.length === 0) {
+        vscode.window.showErrorMessage('No workspace folder open');
+        return;
+      }
+
+      const workspacePath = workspaceFolders[0].uri.fsPath;
+      const envDir = getEnvironmentsPath(workspacePath);
+
+      // Check if directory exists
+      if (!fs.existsSync(envDir)) {
+        const baseFolderName = getBaseFolderName();
+        vscode.window.showWarningMessage(
+          `Environments folder not found. Right-click on .${baseFolderName}/http/ folder and select "Create Environments Folder" to set up environment variables.`
+        );
+        return;
+      }
+
+      // Open folder in file explorer
+      const envDirUri = vscode.Uri.file(envDir);
+      await vscode.commands.executeCommand('revealFileInOS', envDirUri);
+    }
+  );
+
+  // Command to create new environment
+  const createEnvironmentCommand = vscode.commands.registerCommand(
+    'cursor-toys.createEnvironment',
+    async () => {
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders || workspaceFolders.length === 0) {
+        vscode.window.showErrorMessage('No workspace folder open');
+        return;
+      }
+
+      const workspacePath = workspaceFolders[0].uri.fsPath;
+      const envManager = EnvironmentManager.getInstance();
+
+      const envName = await vscode.window.showInputBox({
+        prompt: 'Enter environment name (e.g., staging, qa, prod)',
+        placeHolder: 'staging',
+        validateInput: (value) => {
+          if (!value || value.trim().length === 0) {
+            return 'Environment name cannot be empty';
+          }
+          if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
+            return 'Environment name can only contain letters, numbers, hyphens and underscores';
+          }
+          return null;
+        }
+      });
+
+      if (envName) {
+        const created = await envManager.createEnvironment(envName, workspacePath);
+        if (created) {
+          vscode.window.showInformationMessage(`Environment '${envName}' created successfully`);
+          
+          // Open the file
+          const fileName = envName === 'default' ? '.env' : `.env.${envName}`;
+          const envDir = getEnvironmentsPath(workspacePath);
+          const filePath = path.join(envDir, fileName);
+          const fileUri = vscode.Uri.file(filePath);
+          const document = await vscode.workspace.openTextDocument(fileUri);
+          await vscode.window.showTextDocument(document);
+        } else {
+          vscode.window.showErrorMessage(`Environment '${envName}' already exists`);
+        }
+      }
+    }
+  );
+
+  // Command to initialize environments folder structure
+  const initializeEnvironmentsCommand = vscode.commands.registerCommand(
+    'cursor-toys.initializeEnvironments',
+    async (uri?: vscode.Uri) => {
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders || workspaceFolders.length === 0) {
+        vscode.window.showErrorMessage('No workspace folder open');
+        return;
+      }
+
+      const workspacePath = workspaceFolders[0].uri.fsPath;
+      const envDir = getEnvironmentsPath(workspacePath);
+
+      // Check if directory already exists
+      if (fs.existsSync(envDir)) {
+        const files = fs.readdirSync(envDir);
+        if (files.some(f => f.startsWith('.env'))) {
+          vscode.window.showWarningMessage('Environments folder already exists with environment files.');
+          return;
+        }
+      }
+
+      const envManager = EnvironmentManager.getInstance();
+      await envManager.initializeDefaultEnvironments(workspacePath);
+      const baseFolderName = getBaseFolderName();
+      vscode.window.showInformationMessage(`Environments folder created successfully at .${baseFolderName}/http/environments/`);
+      
+      // Open the folder in explorer
+      const envDirUri = vscode.Uri.file(envDir);
+      await vscode.commands.executeCommand('revealFileInOS', envDirUri);
+    }
+  );
+
+  // Command to minify file
+  const minifyFileCommand = vscode.commands.registerCommand(
+    'cursor-toys.minifyFile',
+    async (uri?: vscode.Uri) => {
+      let filePath: string;
+      
+      if (uri) {
+        filePath = uri.fsPath;
+      } else {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+          vscode.window.showErrorMessage('No file selected');
+          return;
+        }
+        filePath = editor.document.uri.fsPath;
+      }
+
+      // Get configuration
+      const config = vscode.workspace.getConfiguration('cursorToys.minify');
+      const suffix = config.get<string>('outputSuffix', '.min');
+
+      // Detect file type
+      const fileType = detectFileType(filePath);
+      
+      if (fileType === 'unknown') {
+        vscode.window.showErrorMessage('File type not supported for minification');
+        return;
+      }
+
+      // Confirm with user
+      const fileName = path.basename(filePath);
+      const parsedPath = path.parse(filePath);
+      const outputFileName = `${parsedPath.name}${suffix}${parsedPath.ext}`;
+      
+      const confirm = await vscode.window.showInformationMessage(
+        `Minify ${fileName}? Output will be saved as ${outputFileName}`,
+        'Yes', 'No'
+      );
+
+      if (confirm !== 'Yes') {
+        return;
+      }
+
+      // Show progress
+      await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: 'Minifying file...',
+        cancellable: false
+      }, async (progress) => {
+        try {
+          const result = await minifyFile(filePath, suffix);
+          
+          if (!result.success) {
+            vscode.window.showErrorMessage(`Failed to minify: ${result.error}`);
+            return;
+          }
+
+          const stats = formatMinificationStats(result);
+          vscode.window.showInformationMessage(`File minified! ${stats}`);
+
+          // Ask if user wants to open the minified file
+          if (result.outputPath) {
+            const openFile = await vscode.window.showInformationMessage(
+              'Open minified file?',
+              'Yes', 'No'
+            );
+
+            if (openFile === 'Yes') {
+              const outputUri = vscode.Uri.file(result.outputPath);
+              const document = await vscode.workspace.openTextDocument(outputUri);
+              await vscode.window.showTextDocument(document);
+            }
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          vscode.window.showErrorMessage(`Error minifying file: ${errorMessage}`);
+        }
+      });
+    }
+  );
+
+  // Command to trim clipboard (auto detect)
+  const trimClipboardCommand = vscode.commands.registerCommand(
+    'cursor-toys.trimClipboard',
+    async () => {
+      await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: 'Processing clipboard...',
+        cancellable: false
+      }, async (progress) => {
+        await trimClipboardAuto();
+      });
+    }
+  );
+
+  // Command to trim clipboard with type selection prompt
+  const trimClipboardWithPromptCommand = vscode.commands.registerCommand(
+    'cursor-toys.trimClipboardWithPrompt',
+    async () => {
+      await trimClipboardWithPrompt();
+    }
+  );
+
+  // Register URI Handler for cursor://godrix.cursor-toys/* and vscode://godrix.cursor-toys/* deeplinks
   const uriHandler = vscode.window.registerUriHandler({
     handleUri(uri: vscode.Uri) {
       // Suporta ambos os formatos:
-      // - cursor://godrix.cursor-deeplink/annotation?...
-      // - vscode://godrix.cursor-deeplink/annotation?...
+      // - cursor://godrix.cursor-toys/annotation?...
+      // - vscode://godrix.cursor-toys/annotation?...
       const isAnnotationPath = uri.path === '/annotation' || uri.path === 'annotation';
       
       if (isAnnotationPath) {
@@ -1031,8 +1356,8 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Watch for configuration changes
   const configWatcher = vscode.workspace.onDidChangeConfiguration((e) => {
-    if (e.affectsConfiguration('cursorDeeplink.commandsFolder') || 
-        e.affectsConfiguration('cursorDeeplink.personalCommandsView')) {
+    if (e.affectsConfiguration('cursorToys.commandsFolder') || 
+        e.affectsConfiguration('cursorToys.personalCommandsView')) {
       // Dispose old watchers
       userCommandsWatchers.forEach(watcher => watcher.dispose());
       // Create new watchers based on updated configuration
@@ -1054,6 +1379,11 @@ export function activate(context: vscode.ExtensionContext) {
     tabChangeDisposable,
     codeLensDisposable,
     httpCodeLensDisposable,
+    httpHoverDisposable,
+    httpCompletionDisposable,
+    activeEditorChangeDisposable,
+    documentChangeDisposable,
+    visibleEditorsChangeDisposable,
     generateCommand,
     generateCommandSpecific,
     generateRuleSpecific,
@@ -1080,8 +1410,21 @@ export function activate(context: vscode.ExtensionContext) {
     sendSelectionToChatCommand,
     copySelectionAsPromptCommand,
     sendHttpRequestCommand,
+    copyCurlCommandCommand,
+    selectEnvironmentCommand,
+    openEnvironmentsCommand,
+    createEnvironmentCommand,
+    initializeEnvironmentsCommand,
+    minifyFileCommand,
+    trimClipboardCommand,
+    trimClipboardWithPromptCommand,
     uriHandler
   );
+  
+  // Dispose decoration provider
+  context.subscriptions.push({
+    dispose: () => decorationProvider.dispose()
+  });
 }
 
 export function deactivate() {}
