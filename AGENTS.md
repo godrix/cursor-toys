@@ -40,6 +40,9 @@ ANALYTICS.md      # Documentação completa do sistema de analytics
 - Módulos: CommonJS
 - Sempre usar tipos explícitos em funções exportadas
 - Comentários JSDoc para funções públicas e complexas
+- **Emojis**: Nunca usar emojis no código, mensagens de usuário ou comentários, exceto:
+  - Se explicitamente solicitado pelo usuário
+  - Em arquivos de documentação (README.md, CHANGELOG.md, etc.)
 
 ### Estrutura de Funções
 ```typescript
@@ -79,7 +82,7 @@ export async function functionName(param: Type): Promise<ReturnType> {
 - Verificar existência de arquivos antes de operações
 
 ### Configurações
-- Usar `vscode.workspace.getConfiguration('cursorDeeplink')` para acessar configurações
+- Usar `vscode.workspace.getConfiguration('cursorToys')` para acessar configurações
 - Suportar configurações em nível de workspace e usuário
 - Valores padrão sempre definidos
 - Validar configurações antes de usar
@@ -102,13 +105,15 @@ export async function functionName(param: Type): Promise<ReturnType> {
 ### Registro de Comandos
 - Registrar todos os comandos em `activate()`
 - Adicionar disposables ao `context.subscriptions`
-- Usar prefixo `cursor-deeplink.` para todos os comandos
+- Usar prefixo `cursor-toys.` para todos os comandos
 
 ### CodeLens
 - Implementar `vscode.CodeLensProvider`
 - Atualizar CodeLens quando configurações mudarem
-- Mostrar apenas em arquivos válidos (`.cursor/` ou `.claude/` folders)
+- Mostrar apenas em arquivos válidos nas pastas configuradas
+- Usar `getFileTypeFromPath()` para detectar tipo de arquivo
 - Validar extensões permitidas antes de exibir
+- Suporta pasta base customizável (`.cursor/`, `.vscode/`, etc.)
 
 ### Tree Provider
 - Implementar `vscode.TreeDataProvider` para comandos pessoais
@@ -121,14 +126,34 @@ export async function functionName(param: Type): Promise<ReturnType> {
 ## Padrões de Integração
 
 ### Suporte a Múltiplos Formatos
-- **Deeplink**: `cursor://anysphere.cursor-deeplink/`
+- **Deeplink**: `cursor://godrix.cursor-toys/`
 - **Web**: `https://cursor.com/link/`
-- **Custom**: Configurável via `cursorDeeplink.customBaseUrl`
+- **Custom**: Configurável via `cursorToys.customBaseUrl`
 
 ### Pastas Suportadas
-- **Commands**: `.cursor/commands/` ou `.claude/commands/` (configurável)
-- **Rules**: `.cursor/rules/` (apenas)
-- **Prompts**: `.cursor/prompts/` (apenas)
+
+A extensão suporta customização da pasta base através da configuração `cursorToys.baseFolder`:
+
+- **Commands**: `.{baseFolder}/commands/` (configurável via `cursorToys.baseFolder` e `cursorToys.commandsFolder`)
+  - Suporta `.cursor/commands/`, `.claude/commands/`, `.vscode/commands/`, etc.
+  - Para comandos pessoais: `~/.cursor/commands/` ou `~/.claude/commands/`
+  - Para comandos de projeto: `{workspace}/.{baseFolder}/commands/`
+- **Rules**: `.{baseFolder}/rules/` (configurável via `cursorToys.baseFolder`)
+  - **Nota:** Rules são específicos do Cursor AI e podem não funcionar no VS Code
+- **Prompts**: `.{baseFolder}/prompts/` (configurável via `cursorToys.baseFolder`)
+  - **Nota:** Prompts são específicos do Cursor AI e podem não funcionar no VS Code
+- **HTTP**: `.{baseFolder}/http/` (configurável via `cursorToys.baseFolder`)
+  - Suporta `.cursor/http/`, `.vscode/http/`, `.ai/http/`, etc.
+
+**Importante:** Sempre usar funções helper de `utils.ts` para construir paths:
+- `getBaseFolderName()`: Obtém pasta base configurada
+- `getCommandsPath()`: Path para pasta de comandos
+- `getRulesPath()`: Path para pasta de rules
+- `getPromptsPath()`: Path para pasta de prompts
+- `getHttpPath()`: Path para pasta HTTP
+- `getEnvironmentsPath()`: Path para environments HTTP
+
+**Nunca** usar paths hardcoded como `.cursor/` diretamente no código.
 
 ### Comandos Pessoais vs Projeto
 - Comandos pessoais: `~/.cursor/commands/` ou `~/.claude/commands/`
@@ -152,7 +177,7 @@ export async function functionName(param: Type): Promise<ReturnType> {
 
 ### Extensões de Arquivo
 - Padrão: `['md', 'mdc']`
-- Configurável via `cursorDeeplink.allowedExtensions`
+- Configurável via `cursorToys.allowedExtensions`
 - Para rules, preferir `.mdc` se disponível (suporta metadata)
 
 ## Boas Práticas
@@ -183,11 +208,14 @@ export async function functionName(param: Type): Promise<ReturnType> {
 ## Configurações da Extensão
 
 ### Configurações Disponíveis
-- `cursorDeeplink.linkType`: Tipo de link (`deeplink`, `web`, `custom`)
-- `cursorDeeplink.customBaseUrl`: URL base customizada
-- `cursorDeeplink.allowedExtensions`: Extensões permitidas
-- `cursorDeeplink.commandsFolder`: Pasta de comandos (`cursor` ou `claude`)
-- `cursorDeeplink.personalCommandsView`: Exibir comandos de (`both`, `cursor`, `claude`)
+- `cursorToys.linkType`: Tipo de link (`deeplink`, `web`, `custom`)
+- `cursorToys.customBaseUrl`: URL base customizada
+- `cursorToys.allowedExtensions`: Extensões permitidas
+- `cursorToys.baseFolder`: Pasta base para todos os recursos (ex: `cursor`, `vscode`, `ai`)
+- `cursorToys.commandsFolder`: Pasta de comandos pessoais (`cursor` ou `claude`)
+- `cursorToys.personalCommandsView`: Exibir comandos de (`both`, `cursor`, `claude`)
+
+**Nota:** Configurar `baseFolder` afeta commands, rules, prompts e HTTP. Rules e prompts são específicos do Cursor AI.
 
 ### Ativação
 - Ativar usando `onStartupFinished` para garantir que todos os comandos estejam disponíveis
