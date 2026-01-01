@@ -2,14 +2,15 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { generateDeeplink } from './deeplinkGenerator';
 import { importDeeplink } from './deeplinkImporter';
-import { generateShareable, generateShareableWithPath, generateShareableForHttpFolder, generateShareableForEnvFolder, generateShareableForHttpFolderWithEnv, generateShareableForCommandFolder, generateShareableForRuleFolder, generateShareableForPromptFolder, generateShareableForProject } from './shareableGenerator';
-import { importShareable } from './shareableImporter';
-import { getFileTypeFromPath, isAllowedExtension, getUserHomePath, getCommandsPath, getCommandsFolderName, sanitizeFileName, getPersonalCommandsPaths, getPromptsPath, getPersonalPromptsPaths, getBaseFolderName, getHttpPath, getEnvironmentsPath, getEnvironmentsFolderName } from './utils';
+import { generateShareable, generateShareableWithPath, generateShareableForHttpFolder, generateShareableForEnvFolder, generateShareableForHttpFolderWithEnv, generateShareableForCommandFolder, generateShareableForRuleFolder, generateShareableForPromptFolder, generateShareableForNotepadFolder, generateShareableForProject, generateGistShareable, generateGistShareableForBundle } from './shareableGenerator';
+import { importShareable, importFromGist } from './shareableImporter';
+import { getFileTypeFromPath, isAllowedExtension, getUserHomePath, getCommandsPath, getCommandsFolderName, sanitizeFileName, getPersonalCommandsPaths, getPromptsPath, getPersonalPromptsPaths, getNotepadsPath, getBaseFolderName, getHttpPath, getEnvironmentsPath, getEnvironmentsFolderName } from './utils';
 import { DeeplinkCodeLensProvider } from './codelensProvider';
 import { HttpCodeLensProvider } from './httpCodeLensProvider';
 import { EnvCodeLensProvider } from './envCodeLensProvider';
 import { UserCommandsTreeProvider, CommandFileItem } from './userCommandsTreeProvider';
 import { UserPromptsTreeProvider, PromptFileItem } from './userPromptsTreeProvider';
+import { UserNotepadsTreeProvider, NotepadFileItem } from './userNotepadsTreeProvider';
 import { sendToChat, sendSelectionToChat, buildPromptDeeplink, MAX_DEEPLINK_LENGTH } from './sendToChat';
 import { AnnotationPanel, AnnotationParams } from './annotationPanel';
 import { executeHttpRequestFromFile, getExecutionTime, copyCurlCommand } from './httpRequestExecutor';
@@ -17,6 +18,7 @@ import { EnvironmentManager } from './environmentManager';
 import { HttpVariableHoverProvider, HttpEnvironmentCompletionProvider, HttpEnvironmentDecorationProvider } from './httpEnvironmentProviders';
 import { minifyFile, formatMinificationStats, detectFileType } from './minifier';
 import { trimClipboardAuto, trimClipboardWithPrompt } from './clipboardProcessor';
+import { GistManager } from './gistManager';
 import * as fs from 'fs';
 
 /**
@@ -65,7 +67,7 @@ async function generateDeeplinkWithValidation(
  */
 async function generateShareableWithValidation(
   uri: vscode.Uri | undefined,
-  forcedType?: 'command' | 'rule' | 'prompt' | 'http' | 'env'
+  forcedType?: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env'
 ): Promise<void> {
   // If no URI, try to get from active editor
   let filePath: string;
@@ -306,6 +308,14 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  // Specific command to generate notepad shareable
+  const generateShareableNotepadSpecific = vscode.commands.registerCommand(
+    'cursor-toys.shareAsCursorToysNotepad',
+    async (uri?: vscode.Uri) => {
+      await generateShareableWithValidation(uri, 'notepad');
+    }
+  );
+
   // Specific command to generate HTTP shareable
   const generateShareableHttpSpecific = vscode.commands.registerCommand(
     'cursor-toys.shareAsCursorToysHttp',
@@ -542,6 +552,36 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  // Command to share notepad folder as bundle
+  const shareNotepadFolderCommand = vscode.commands.registerCommand(
+    'cursor-toys.shareAsCursorToysNotepadFolder',
+    async (uri?: vscode.Uri) => {
+      try {
+        let folderPath: string;
+        
+        if (uri) {
+          const stat = await vscode.workspace.fs.stat(uri);
+          if (stat.type !== vscode.FileType.Directory) {
+            vscode.window.showErrorMessage('Please select a folder');
+            return;
+          }
+          folderPath = uri.fsPath;
+        } else {
+          vscode.window.showErrorMessage('Please select a folder');
+          return;
+        }
+
+        const shareable = await generateShareableForNotepadFolder(folderPath);
+        if (shareable) {
+          await vscode.env.clipboard.writeText(shareable);
+          vscode.window.showInformationMessage('Notepads bundle copied to clipboard!');
+        }
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error generating notepad bundle: ${error}`);
+      }
+    }
+  );
+
   // Command to share entire project (.cursor folder)
   const shareProjectCommand = vscode.commands.registerCommand(
     'cursor-toys.shareAsCursorToysProject',
@@ -572,34 +612,49 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // Unified command to import both deeplink and shareable
+  // Unified command to import both deeplink, shareable and Gist
   const importCommand = vscode.commands.registerCommand(
     'cursor-toys.import',
     async () => {
       const url = await vscode.window.showInputBox({
-        prompt: 'Paste your CursorToys link (supports: files, bundles, deeplinks)',
-        placeHolder: 'cursortoys://... or cursor://... or https://cursor.com/link/...',
+        prompt: 'Paste your CursorToys link (supports: files, bundles, deeplinks, Gists)',
+        placeHolder: 'cursortoys://... or cursor://... or https://cursor.com/link/... or https://gist.github.com/...',
         validateInput: (value) => {
           if (!value) {
             return 'Please enter a link';
           }
-          // Accept both deeplink formats and cursortoys format
+          // Accept deeplink formats, cursortoys format, and gist URLs/IDs
           const isDeeplink = value.includes('cursor-deeplink') || value.includes('cursor.com/link');
           const isCursorToys = value.startsWith('cursortoys://');
+          const isGist = value.includes('gist.github.com') || value.includes('gist.githubusercontent.com') || /^[a-f0-9]+$/i.test(value.trim());
           
-          if (!isDeeplink && !isCursorToys) {
-            return 'Invalid link. Must be a Cursor deeplink or CursorToys shareable';
+          if (!isDeeplink && !isCursorToys && !isGist) {
+            return 'Invalid link. Must be a Cursor deeplink, CursorToys shareable, or GitHub Gist URL/ID';
           }
           return null;
         }
       });
 
       if (url) {
-        // Detect type and route to appropriate importer
-        if (url.startsWith('cursortoys://')) {
-          await importShareable(url);
+        const trimmedUrl = url.trim();
+        
+        // Check if it's a Gist URL or ID
+        const gistManager = GistManager.getInstance(context);
+        const gistId = gistManager.parseGistUrl(trimmedUrl);
+        
+        if (gistId) {
+          // It's a Gist - import from Gist
+          try {
+            await importFromGist(trimmedUrl, context);
+          } catch (error) {
+            vscode.window.showErrorMessage(`Error importing from Gist: ${error}`);
+          }
+        } else if (trimmedUrl.startsWith('cursortoys://')) {
+          // It's a CursorToys shareable
+          await importShareable(trimmedUrl);
         } else {
-          await importDeeplink(url);
+          // It's a deeplink
+          await importDeeplink(trimmedUrl);
         }
       }
     }
@@ -1256,6 +1311,314 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  // Register User Notepads Tree Provider
+  const userNotepadsTreeProvider = new UserNotepadsTreeProvider();
+  const userNotepadsTreeView = vscode.window.createTreeView('cursor-toys.userNotepads', {
+    treeDataProvider: userNotepadsTreeProvider,
+    showCollapseAll: false,
+    dragAndDropController: userNotepadsTreeProvider
+  });
+
+  /**
+   * Helper function to get URI from notepad command argument (can be NotepadFileItem or vscode.Uri)
+   */
+  function getNotepadUriFromArgument(arg: NotepadFileItem | vscode.Uri | undefined): vscode.Uri | null {
+    if (!arg) {
+      return null;
+    }
+    if (arg instanceof vscode.Uri) {
+      return arg;
+    }
+    if ('uri' in arg) {
+      return arg.uri;
+    }
+    return null;
+  }
+
+  /**
+   * Helper function to get file name from notepad command argument
+   */
+  function getNotepadFileNameFromArgument(arg: NotepadFileItem | vscode.Uri | undefined): string {
+    if (!arg) {
+      return 'file';
+    }
+    if (arg instanceof vscode.Uri) {
+      return path.basename(arg.fsPath);
+    }
+    if ('fileName' in arg) {
+      return arg.fileName;
+    }
+    return 'file';
+  }
+
+  /**
+   * Helper function to get file path from notepad command argument
+   */
+  function getNotepadFilePathFromArgument(arg: NotepadFileItem | vscode.Uri | undefined): string | null {
+    if (!arg) {
+      return null;
+    }
+    if (arg instanceof vscode.Uri) {
+      return arg.fsPath;
+    }
+    if ('filePath' in arg) {
+      return arg.filePath;
+    }
+    return null;
+  }
+
+  // Command to create new notepad
+  const createNotepad = vscode.commands.registerCommand(
+    'cursor-toys.createNotepad',
+    async () => {
+      try {
+        // Check if workspace is open
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+          vscode.window.showErrorMessage('No workspace open. Notepads are workspace-specific.');
+          return;
+        }
+
+        // Ask for notepad name
+        const notepadName = await vscode.window.showInputBox({
+          prompt: 'Enter notepad name',
+          placeHolder: 'my-notepad',
+          validateInput: (value) => {
+            if (!value || value.trim().length === 0) {
+              return 'Notepad name cannot be empty';
+            }
+            // Sanitize and check if name is valid
+            const sanitized = sanitizeFileName(value);
+            if (sanitized.length === 0) {
+              return 'Notepad name contains invalid characters';
+            }
+            return null;
+          }
+        });
+
+        if (!notepadName) {
+          return;
+        }
+
+        // Get configuration
+        const config = vscode.workspace.getConfiguration('cursorToys');
+        const allowedExtensions = config.get<string[]>('allowedExtensions', ['md', 'mdc']);
+        const defaultExtension = allowedExtensions[0] || 'md';
+
+        // Sanitize name and add extension
+        const sanitized = sanitizeFileName(notepadName);
+        const fileName = `${sanitized}.${defaultExtension}`;
+
+        // Get notepads path (project only)
+        const workspacePath = workspaceFolder.uri.fsPath;
+        const notepadsPath = getNotepadsPath(workspacePath, false);
+        const fullPath = path.join(notepadsPath, fileName);
+        const fileUri = vscode.Uri.file(fullPath);
+
+        // Check if file already exists
+        try {
+          await vscode.workspace.fs.stat(fileUri);
+          const overwrite = await vscode.window.showWarningMessage(
+            `Notepad "${fileName}" already exists. Do you want to overwrite it?`,
+            'Yes',
+            'No'
+          );
+          if (overwrite !== 'Yes') {
+            return;
+          }
+        } catch {
+          // File doesn't exist, that's fine
+        }
+
+        // Create folder if it doesn't exist
+        const folderUri = vscode.Uri.file(notepadsPath);
+        try {
+          await vscode.workspace.fs.stat(folderUri);
+        } catch {
+          await vscode.workspace.fs.createDirectory(folderUri);
+        }
+
+        // Create file with initial content
+        const initialContent = `# ${notepadName}\n\n`;
+        await vscode.workspace.fs.writeFile(fileUri, Buffer.from(initialContent, 'utf8'));
+
+        vscode.window.showInformationMessage(`Notepad "${fileName}" created!`);
+        userNotepadsTreeProvider.refresh();
+
+        // Open file
+        const document = await vscode.workspace.openTextDocument(fileUri);
+        await vscode.window.showTextDocument(document);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error creating notepad: ${error}`);
+      }
+    }
+  );
+
+  // Command to open user notepad file
+  const openNotepad = vscode.commands.registerCommand(
+    'cursor-toys.openNotepad',
+    async (arg?: NotepadFileItem | vscode.Uri) => {
+      const uri = getNotepadUriFromArgument(arg);
+      if (!uri) {
+        vscode.window.showErrorMessage('No file selected');
+        return;
+      }
+      try {
+        const document = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(document);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error opening file: ${error}`);
+      }
+    }
+  );
+
+  // Command to generate shareable for user notepad
+  const generateNotepadShareable = vscode.commands.registerCommand(
+    'cursor-toys.generateNotepadShareable',
+    async (arg?: NotepadFileItem | vscode.Uri) => {
+      const uri = getNotepadUriFromArgument(arg);
+      if (!uri) {
+        vscode.window.showErrorMessage('No file selected');
+        return;
+      }
+      await generateShareableWithValidation(uri, 'notepad');
+    }
+  );
+
+  // Command to delete user notepad
+  const deleteNotepad = vscode.commands.registerCommand(
+    'cursor-toys.deleteNotepad',
+    async (arg?: NotepadFileItem | vscode.Uri) => {
+      const uri = getNotepadUriFromArgument(arg);
+      if (!uri) {
+        vscode.window.showErrorMessage('No file selected');
+        return;
+      }
+      const fileName = getNotepadFileNameFromArgument(arg);
+      const confirm = await vscode.window.showWarningMessage(
+        `Are you sure you want to delete "${fileName}"?`,
+        'Yes',
+        'No'
+      );
+
+      if (confirm === 'Yes') {
+        try {
+          await vscode.workspace.fs.delete(uri);
+          vscode.window.showInformationMessage(`Notepad "${fileName}" deleted`);
+          userNotepadsTreeProvider.refresh();
+        } catch (error) {
+          vscode.window.showErrorMessage(`Error deleting file: ${error}`);
+        }
+      }
+    }
+  );
+
+  // Command to reveal user notepad in folder
+  const revealNotepad = vscode.commands.registerCommand(
+    'cursor-toys.revealNotepad',
+    async (arg?: NotepadFileItem | vscode.Uri) => {
+      const uri = getNotepadUriFromArgument(arg);
+      if (!uri) {
+        vscode.window.showErrorMessage('No file selected');
+        return;
+      }
+      try {
+        await vscode.commands.executeCommand('revealFileInOS', uri);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error revealing file: ${error}`);
+      }
+    }
+  );
+
+  // Command to rename user notepad
+  const renameNotepad = vscode.commands.registerCommand(
+    'cursor-toys.renameNotepad',
+    async (arg?: NotepadFileItem | vscode.Uri) => {
+      const uri = getNotepadUriFromArgument(arg);
+      if (!uri) {
+        vscode.window.showErrorMessage('No file selected');
+        return;
+      }
+      const currentFileName = getNotepadFileNameFromArgument(arg);
+      const currentFilePath = getNotepadFilePathFromArgument(arg);
+      
+      if (!currentFilePath) {
+        vscode.window.showErrorMessage('Unable to determine file path');
+        return;
+      }
+
+      const config = vscode.workspace.getConfiguration('cursorToys');
+      const allowedExtensions = config.get<string[]>('allowedExtensions', ['md', 'mdc']);
+
+      const newName = await vscode.window.showInputBox({
+        prompt: 'Enter new file name',
+        value: currentFileName,
+        validateInput: (value) => {
+          if (!value || value.trim().length === 0) {
+            return 'File name cannot be empty';
+          }
+
+          // Check if extension is allowed
+          const ext = path.extname(value);
+          const extWithoutDot = ext.startsWith('.') ? ext.substring(1) : ext;
+          if (!allowedExtensions.includes(extWithoutDot.toLowerCase())) {
+            return `Extension must be one of: ${allowedExtensions.join(', ')}`;
+          }
+
+          // Sanitize and check if name is valid
+          const sanitized = sanitizeFileName(value);
+          if (sanitized !== path.parse(value).name) {
+            return 'File name contains invalid characters';
+          }
+
+          // Check if file already exists
+          const newPath = path.join(path.dirname(currentFilePath), value);
+          if (newPath === currentFilePath) {
+            return null; // Same name, no error
+          }
+
+          return null;
+        }
+      });
+
+      if (newName && newName !== currentFileName) {
+        try {
+          const newPath = path.join(path.dirname(currentFilePath), newName);
+          const newUri = vscode.Uri.file(newPath);
+
+          // Check if file already exists
+          try {
+            await vscode.workspace.fs.stat(newUri);
+            const overwrite = await vscode.window.showWarningMessage(
+              `File "${newName}" already exists. Do you want to overwrite it?`,
+              'Yes',
+              'No'
+            );
+            if (overwrite !== 'Yes') {
+              return;
+            }
+          } catch {
+            // File doesn't exist, that's fine
+          }
+
+          await vscode.workspace.fs.rename(uri, newUri, { overwrite: true });
+          vscode.window.showInformationMessage(`Notepad renamed to "${newName}"`);
+          userNotepadsTreeProvider.refresh();
+        } catch (error) {
+          vscode.window.showErrorMessage(`Error renaming file: ${error}`);
+        }
+      }
+    }
+  );
+
+  // Command to refresh user notepads tree
+  const refreshNotepads = vscode.commands.registerCommand(
+    'cursor-toys.refreshNotepads',
+    () => {
+      userNotepadsTreeProvider.refresh();
+    }
+  );
+
   // Command to send text to chat
   const sendToChatCommand = vscode.commands.registerCommand(
     'cursor-toys.sendToChat',
@@ -1635,6 +1998,159 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  // Command to share file via GitHub Gist
+  const shareViaGistCommand = vscode.commands.registerCommand(
+    'cursor-toys.shareViaGist',
+    async (uri?: vscode.Uri) => {
+      try {
+        let filePath: string;
+        
+        if (uri) {
+          filePath = uri.fsPath;
+        } else {
+          const editor = vscode.window.activeTextEditor;
+          if (!editor) {
+            vscode.window.showErrorMessage('No file selected');
+            return;
+          }
+          filePath = editor.document.uri.fsPath;
+        }
+
+        // Detect file type
+        const fileType = getFileTypeFromPath(filePath);
+        if (!fileType) {
+          vscode.window.showErrorMessage('File must be in commands/, rules/, prompts/, notepads/, http/ or http/environments/ folder');
+          return;
+        }
+
+        // Generate Gist
+        const gistUrl = await generateGistShareable(filePath, fileType, context);
+        
+        if (gistUrl) {
+          // Copy to clipboard
+          await vscode.env.clipboard.writeText(gistUrl);
+          vscode.window.showInformationMessage('Gist created successfully! URL copied to clipboard.');
+        }
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error sharing via Gist: ${error}`);
+      }
+    }
+  );
+
+  // Command to share folder via GitHub Gist
+  const shareFolderViaGistCommand = vscode.commands.registerCommand(
+    'cursor-toys.shareFolderViaGist',
+    async (uri?: vscode.Uri) => {
+      try {
+        if (!uri) {
+          vscode.window.showErrorMessage('Please select a folder');
+          return;
+        }
+
+        // Check if it's a folder
+        const stat = await vscode.workspace.fs.stat(uri);
+        if (stat.type !== vscode.FileType.Directory) {
+          vscode.window.showErrorMessage('Please select a folder');
+          return;
+        }
+
+        const folderPath = uri.fsPath;
+        const folderName = path.basename(folderPath);
+
+        // Determine bundle type based on folder name/location
+        let bundleType: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'project' | null = null;
+        
+        if (folderName === 'commands' || folderPath.includes('/commands')) {
+          bundleType = 'command';
+        } else if (folderName === 'rules' || folderPath.includes('/rules')) {
+          bundleType = 'rule';
+        } else if (folderName === 'prompts' || folderPath.includes('/prompts')) {
+          bundleType = 'prompt';
+        } else if (folderName === 'notepads' || folderPath.includes('/notepads')) {
+          bundleType = 'notepad';
+        } else if (folderName === 'http' || folderPath.includes('/http')) {
+          bundleType = 'http';
+        } else if (folderName === '.cursor' || folderName === '.vscode' || folderPath.endsWith('/.cursor') || folderPath.endsWith('/.vscode')) {
+          bundleType = 'project';
+        } else {
+          // Ask user to select type
+          const choice = await vscode.window.showQuickPick(
+            [
+              { label: 'Commands Bundle', value: 'command' as const },
+              { label: 'Rules Bundle', value: 'rule' as const },
+              { label: 'Prompts Bundle', value: 'prompt' as const },
+              { label: 'Notepads Bundle', value: 'notepad' as const },
+              { label: 'HTTP Bundle', value: 'http' as const },
+              { label: 'Project Bundle', value: 'project' as const }
+            ],
+            {
+              placeHolder: 'Select bundle type'
+            }
+          );
+
+          if (!choice) {
+            return;
+          }
+
+          bundleType = choice.value;
+        }
+
+        // Generate Gist bundle
+        const gistUrl = await generateGistShareableForBundle(bundleType, folderPath, context);
+        
+        if (gistUrl) {
+          // Copy to clipboard
+          await vscode.env.clipboard.writeText(gistUrl);
+          vscode.window.showInformationMessage('Gist bundle created successfully! URL copied to clipboard.');
+        }
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error sharing folder via Gist: ${error}`);
+      }
+    }
+  );
+
+  // Command to configure GitHub token (Command Palette only)
+  const configureGitHubTokenCommand = vscode.commands.registerCommand(
+    'cursor-toys.configureGitHubToken',
+    async () => {
+      try {
+        const gistManager = GistManager.getInstance(context);
+        const token = await gistManager.promptForToken();
+        
+        if (token) {
+          vscode.window.showInformationMessage('GitHub token configured successfully!');
+        }
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error configuring GitHub token: ${error}`);
+      }
+    }
+  );
+
+  // Command to remove GitHub token
+  const removeGitHubTokenCommand = vscode.commands.registerCommand(
+    'cursor-toys.removeGitHubToken',
+    async () => {
+      try {
+        const confirm = await vscode.window.showWarningMessage(
+          'Are you sure you want to remove the GitHub token?',
+          'Yes',
+          'No'
+        );
+
+        if (confirm !== 'Yes') {
+          return;
+        }
+
+        const gistManager = GistManager.getInstance(context);
+        await gistManager.removeGitHubToken();
+        
+        vscode.window.showInformationMessage('GitHub token removed successfully!');
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error removing GitHub token: ${error}`);
+      }
+    }
+  );
+
   // Register URI Handler for cursor://godrix.cursor-toys/* and vscode://godrix.cursor-toys/* deeplinks
   const uriHandler = vscode.window.registerUriHandler({
     handleUri(uri: vscode.Uri) {
@@ -1720,6 +2236,43 @@ export function activate(context: vscode.ExtensionContext) {
 
   let userPromptsWatchers = createPromptsWatchers();
 
+  // File system watchers for notepads folder
+  const createNotepadsWatchers = (): vscode.FileSystemWatcher[] => {
+    const watchers: vscode.FileSystemWatcher[] = [];
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    
+    if (!workspaceFolder) {
+      return watchers; // No workspace, no watchers
+    }
+
+    const workspacePath = workspaceFolder.uri.fsPath;
+    const notepadsPath = getNotepadsPath(workspacePath, false);
+    const folderUri = vscode.Uri.file(notepadsPath);
+    
+    const watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(folderUri, '**/*')
+    );
+
+    watcher.onDidCreate(() => {
+      userNotepadsTreeProvider.refresh();
+    });
+
+    watcher.onDidDelete(() => {
+      userNotepadsTreeProvider.refresh();
+    });
+
+    watcher.onDidChange(() => {
+      // Optionally refresh on file changes (not just create/delete)
+      // userNotepadsTreeProvider.refresh();
+    });
+
+    watchers.push(watcher);
+    
+    return watchers;
+  };
+
+  let userNotepadsWatchers = createNotepadsWatchers();
+
   // Watch for configuration changes
   const configWatcher = vscode.workspace.onDidChangeConfiguration((e) => {
     if (e.affectsConfiguration('cursorToys.commandsFolder') || 
@@ -1737,6 +2290,9 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(watcher);
   });
   userPromptsWatchers.forEach(watcher => {
+    context.subscriptions.push(watcher);
+  });
+  userNotepadsWatchers.forEach(watcher => {
     context.subscriptions.push(watcher);
   });
 
@@ -1757,6 +2313,7 @@ export function activate(context: vscode.ExtensionContext) {
     generateShareableCommandSpecific,
     generateShareableRuleSpecific,
     generateShareablePromptSpecific,
+    generateShareableNotepadSpecific,
     generateShareableHttpSpecific,
     generateShareableEnvSpecific,
     generateShareableHttpWithPathSpecific,
@@ -1767,6 +2324,7 @@ export function activate(context: vscode.ExtensionContext) {
     shareCommandFolderCommand,
     shareRuleFolderCommand,
     sharePromptFolderCommand,
+    shareNotepadFolderCommand,
     shareProjectCommand,
     importCommand,
     saveAsUserCommand,
@@ -1785,6 +2343,14 @@ export function activate(context: vscode.ExtensionContext) {
     revealUserPrompt,
     renameUserPrompt,
     refreshUserPrompts,
+    userNotepadsTreeView,
+    createNotepad,
+    openNotepad,
+    generateNotepadShareable,
+    deleteNotepad,
+    revealNotepad,
+    renameNotepad,
+    refreshNotepads,
     configWatcher,
     sendToChatCommand,
     sendSelectionToChatCommand,
@@ -1798,6 +2364,10 @@ export function activate(context: vscode.ExtensionContext) {
     minifyFileCommand,
     trimClipboardCommand,
     trimClipboardWithPromptCommand,
+    shareViaGistCommand,
+    shareFolderViaGistCommand,
+    configureGitHubTokenCommand,
+    removeGitHubTokenCommand,
     uriHandler
   );
   

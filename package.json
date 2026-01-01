@@ -2,7 +2,7 @@
   "name": "cursor-toys",
   "displayName": "CursorToys",
   "description": "🚀 Supercharge your Cursor AI workflow! Share commands instantly, test APIs in-editor, manage personal libraries, and boost team collaboration. The ultimate productivity toolkit for Cursor users.",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "publisher": "godrix",
   "icon": "resources/icon.png",
   "author": {
@@ -57,6 +57,7 @@
     "onCommand:cursor-toys.save-as-user-prompt",
     "onView:cursor-toys.userCommands",
     "onView:cursor-toys.userPrompts",
+    "onView:cursor-toys.userNotepads",
     "onCommand:cursor-toys.sendToChat",
     "onCommand:cursor-toys.sendSelectionToChat",
     "onCommand:cursor-toys.copySelectionAsPrompt",
@@ -201,6 +202,45 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "cursor-toys.createNotepad",
+        "title": "CursorToys: Create New Notepad",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cursor-toys.openNotepad",
+        "title": "CursorToys: Open Notepad",
+        "icon": "$(note)"
+      },
+      {
+        "command": "cursor-toys.generateNotepadShareable",
+        "title": "CursorToys: Share Notepad"
+      },
+      {
+        "command": "cursor-toys.deleteNotepad",
+        "title": "CursorToys: Delete Notepad"
+      },
+      {
+        "command": "cursor-toys.revealNotepad",
+        "title": "CursorToys: Reveal Notepad in Folder"
+      },
+      {
+        "command": "cursor-toys.renameNotepad",
+        "title": "CursorToys: Rename Notepad"
+      },
+      {
+        "command": "cursor-toys.refreshNotepads",
+        "title": "CursorToys: Refresh Notepads",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysNotepad",
+        "title": "CursorToys: Share as CursorToys (Notepad)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysNotepadFolder",
+        "title": "CursorToys: Share Folder as CursorToys (Notepads Bundle)"
+      },
+      {
         "command": "cursor-toys.sendToChat",
         "title": "CursorToys: Send Text to Chat",
         "icon": "$(comment-discussion)"
@@ -255,6 +295,26 @@
         "command": "cursor-toys.trimClipboardWithPrompt",
         "title": "CursorToys: Trim & Minify Clipboard (Select Type)",
         "icon": "$(clippy)"
+      },
+      {
+        "command": "cursor-toys.shareViaGist",
+        "title": "CursorToys: Share via GitHub Gist"
+      },
+      {
+        "command": "cursor-toys.shareFolderViaGist",
+        "title": "CursorToys: Share Folder via GitHub Gist"
+      },
+      {
+        "command": "cursor-toys.importFromGist",
+        "title": "CursorToys: Import from GitHub Gist"
+      },
+      {
+        "command": "cursor-toys.configureGitHubToken",
+        "title": "CursorToys: Configure GitHub Token"
+      },
+      {
+        "command": "cursor-toys.removeGitHubToken",
+        "title": "CursorToys: Remove GitHub Token"
       }
     ],
     "submenus": [
@@ -278,6 +338,11 @@
           "id": "cursor-toys.userPrompts",
           "name": "Personal Prompts",
           "when": "true"
+        },
+        {
+          "id": "cursor-toys.userNotepads",
+          "name": "Project Notepads",
+          "when": "true"
         }
       ]
     },
@@ -285,7 +350,7 @@
       "explorer/context": [
         {
           "submenu": "cursor-toys",
-          "when": "resourcePath =~ /[\\\\/]\\.(cursor|claude|vscode|ai)[\\\\/](commands|rules|prompts|http)/ || resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)$/",
+          "when": "resourcePath =~ /[\\\\/]\\.(cursor|claude|vscode|ai)[\\\\/](commands|rules|prompts|notepads|http)/ || resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)$/",
           "group": "navigation"
         }
       ],
@@ -298,6 +363,16 @@
         {
           "command": "cursor-toys.refreshUserPrompts",
           "when": "view == cursor-toys.userPrompts",
+          "group": "navigation"
+        },
+        {
+          "command": "cursor-toys.createNotepad",
+          "when": "view == cursor-toys.userNotepads",
+          "group": "navigation"
+        },
+        {
+          "command": "cursor-toys.refreshNotepads",
+          "when": "view == cursor-toys.userNotepads",
           "group": "navigation"
         }
       ],
@@ -351,6 +426,31 @@
           "command": "cursor-toys.deleteUserPrompt",
           "when": "view == cursor-toys.userPrompts && viewItem == userPromptFile",
           "group": "2_actions"
+        },
+        {
+          "command": "cursor-toys.openNotepad",
+          "when": "view == cursor-toys.userNotepads && viewItem == userNotepadFile",
+          "group": "inline"
+        },
+        {
+          "command": "cursor-toys.generateNotepadShareable",
+          "when": "view == cursor-toys.userNotepads && viewItem == userNotepadFile",
+          "group": "1_actions"
+        },
+        {
+          "command": "cursor-toys.renameNotepad",
+          "when": "view == cursor-toys.userNotepads && viewItem == userNotepadFile",
+          "group": "1_actions"
+        },
+        {
+          "command": "cursor-toys.revealNotepad",
+          "when": "view == cursor-toys.userNotepads && viewItem == userNotepadFile",
+          "group": "1_actions"
+        },
+        {
+          "command": "cursor-toys.deleteNotepad",
+          "when": "view == cursor-toys.userNotepads && viewItem == userNotepadFile",
+          "group": "2_actions"
         }
       ],
       "cursor-toys": [
@@ -399,6 +499,14 @@
           "when": "explorerResourceIsFolder && resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)[\\\\/]prompts($|[\\\\/])/"
         },
         {
+          "command": "cursor-toys.shareAsCursorToysNotepad",
+          "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/notepads\\// && !explorerResourceIsFolder"
+        },
+        {
+          "command": "cursor-toys.shareAsCursorToysNotepadFolder",
+          "when": "explorerResourceIsFolder && resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)[\\\\/]notepads($|[\\\\/])/"
+        },
+        {
           "command": "cursor-toys.shareAsCursorToysHttp",
           "when": "resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)[\\\\/]http[\\\\/].*\\.(req|request)$/ && !explorerResourceIsFolder"
         },
@@ -433,6 +541,14 @@
         {
           "command": "cursor-toys.initializeEnvironments",
           "when": "explorerResourceIsFolder && resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)[\\\\/]http($|[\\\\/])/"
+        },
+        {
+          "command": "cursor-toys.shareViaGist",
+          "when": "(resourceExtname =~ /\\.(md|mdc|req|request)$/ || resourceFilename =~ /^\\.env/) && !explorerResourceIsFolder"
+        },
+        {
+          "command": "cursor-toys.shareFolderViaGist",
+          "when": "explorerResourceIsFolder && (resourcePath =~ /[\\\\/]\\.(cursor|claude|vscode|ai)[\\\\/](commands|rules|prompts|notepads|http)($|[\\\\/])/ || resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)$/)"
         }
       ],
       "editor/context": [
@@ -592,6 +708,21 @@
           "type": "string",
           "default": ".min",
           "description": "Suffix for minified files (e.g., '.min' creates 'file.min.js')"
+        },
+        "cursorToys.gistDefaultVisibility": {
+          "type": "string",
+          "enum": [
+            "public",
+            "private",
+            "ask"
+          ],
+          "enumDescriptions": [
+            "Always create public gists",
+            "Always create private gists",
+            "Ask each time before creating a gist"
+          ],
+          "default": "ask",
+          "description": "Default visibility when creating GitHub Gists"
         }
       }
     },
