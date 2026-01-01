@@ -6,7 +6,7 @@
 
 **Supercharge your workflow** • **Test APIs in-editor** • **Share instantly** • **Collaborate effortlessly**
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://marketplace.visualstudio.com/items?itemName=Godrix.cursor-toys)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://marketplace.visualstudio.com/items?itemName=Godrix.cursor-toys)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/d/Godrix.cursor-toys.svg)](https://marketplace.visualstudio.com/items?itemName=Godrix.cursor-toys)
 [![Open VSX Downloads](https://img.shields.io/open-vsx/dt/godrix/cursor-toys?label=Open%20VSX%20downloads)](https://open-vsx.org/extension/godrix/cursor-toys)
@@ -75,10 +75,23 @@
 **Share AI configurations in one click** — No more screenshots or copy-pasting.
 
 - 🎯 **One-Click Share Links** — Convert commands, rules, and prompts to shareable deeplinks or CursorToys format
-- ⌨️ **Fast Import** — `Cmd+Shift+I` to import from any link (deeplink or CursorToys)
-- 🔄 **Multiple Formats** — Deeplink, web URL, CursorToys compressed format, or custom protocols
+- ⌨️ **Fast Import** — `Cmd+Shift+I` to import from any link (deeplink, CursorToys, or GitHub Gist)
+- 🔄 **Multiple Formats** — Deeplink, web URL, CursorToys compressed format, or GitHub Gist
 - 👥 **Team Sync** — Everyone uses the same AI instructions
 - 📦 **CursorToys Format** — New compressed format ideal for large files (no URL length limits)
+- 🌐 **GitHub Gist Integration** — Share via Gist for maximum compatibility and discoverability
+
+### 📓 Project Documentation
+
+**Build project-specific documentation** — Notepads that stay with your project.
+
+- 📝 **Project Notepads** — Workspace-specific markdown notes in `.cursor/notepads/`
+- 🗂️ **Visual Tree View** — Browse and manage notepads in Explorer sidebar
+- 📂 **Hierarchical Organization** — Organize notepads in subfolders with drag-and-drop
+- ✏️ **Easy Management** — Create, rename, delete, and reveal notepads
+- 🔗 **Shareable** — Generate CursorToys shareables or Gist for individual notepads or entire folders
+- 🎯 **Drag & Drop** — Move notepads between folders easily
+- 🔄 **Auto-Refresh** — File system watchers keep tree view in sync
 
 ### 🌐 In-Editor API Testing
 
@@ -487,7 +500,306 @@ Configure HTTP request behavior in your settings:
 
 - **curl**: The extension uses `curl` command-line tool to execute requests. Make sure `curl` is installed and available in your system PATH.
 
-### HTTP Environment Variables
+## 📓 Project Notepads
+
+**Document your project directly in your workspace** — Project-specific markdown notes that stay with your code.
+
+### What are Project Notepads?
+
+Project Notepads are workspace-specific markdown notes stored in `.cursor/notepads/` (or `.vscode/notepads/` if you've configured a different base folder). Unlike Personal Commands/Prompts that are available across all projects, notepads are tied to the current workspace.
+
+**Perfect for:**
+- 📋 Project documentation
+- 🏗️ Architecture decisions
+- 📝 Development guides
+- 🐛 Bug investigation notes
+- 💡 Feature planning
+- 📖 Onboarding documentation
+
+### Creating and Managing Notepads
+
+#### Visual Demo
+![Project Notepads Tree View](.github/assets/personal-commands-view-tree.gif)
+*Similar tree view experience for managing notepads*
+
+#### Method 1: Tree View (Recommended)
+
+1. **Open Project Notepads View** in Explorer sidebar
+2. **Click the "+" icon** to create a new notepad
+3. **Enter notepad name** (e.g., "architecture-decisions")
+4. **Start writing** — File created with markdown template
+
+#### Method 2: Manual Creation
+
+1. Create a `.cursor/notepads/` folder in your workspace
+2. Add `.md` or `.mdc` files
+3. Files automatically appear in the Project Notepads tree view
+
+### Organizing Notepads
+
+**Hierarchical Folder Structure:**
+
+```
+project/
+  .cursor/
+    notepads/
+      architecture/
+        decisions.md
+        diagrams.md
+      guides/
+        setup.md
+        deployment.md
+      investigations/
+        bug-123.md
+        performance.md
+```
+
+**Drag and Drop:**
+- Drag notepads between folders
+- Move files to organize documentation
+- Tree view updates automatically
+
+### Sharing Notepads
+
+#### Share Single Notepad
+1. Right-click notepad in tree view
+2. Select **"CursorToys: Share Notepad"**
+3. Choose format:
+   - **CursorToys Format** — Compressed shareable
+   - **GitHub Gist** — Share via Gist (see below)
+4. Share link with team
+
+#### Share Notepad Folder
+1. Right-click on `.cursor/notepads/` folder
+2. Select **"CursorToys: Share Folder as CursorToys (Notepads Bundle)"**
+3. Entire documentation bundle copied to clipboard
+4. Team members import with `Cmd+Shift+I`
+
+### Import Notepads
+
+**Import Single Notepad:**
+1. Press `Cmd+Shift+I` (Mac) or `Ctrl+Shift+I` (Windows/Linux)
+2. Paste notepad shareable
+3. Notepad created in workspace `.cursor/notepads/` folder
+
+**Import Notepad Bundle:**
+1. Press `Cmd+Shift+I`
+2. Paste bundle URL
+3. All notepads imported with folder structure preserved
+
+### Use Cases
+
+#### Use Case 1: Architecture Documentation
+**Problem**: Architecture decisions scattered in Slack, docs, and comments.
+
+**Solution**:
+1. Create `architecture/` folder in notepads
+2. Document each decision in separate notepad
+3. Share folder as bundle when onboarding new members
+4. Keep documentation version-controlled with code
+
+#### Use Case 2: Bug Investigation Notes
+**Problem**: Debugging notes lost after resolving issues.
+
+**Solution**:
+1. Create notepad for each investigation
+2. Document findings, attempts, and solution
+3. Share notepad when asking for help
+4. Reference later when similar issues occur
+
+#### Use Case 3: Team Onboarding
+**Problem**: New team members don't know where to start.
+
+**Solution**:
+1. Create comprehensive onboarding notepads
+2. Include setup guides, conventions, and tips
+3. Share notepad bundle in onboarding documentation
+4. New members have everything they need locally
+
+## 🌐 GitHub Gist Integration
+
+**Share via GitHub Gist** — Maximum compatibility, discoverability, and browser viewing.
+
+### Why Share via Gist?
+
+- ✅ **Browser Viewing** — Recipients can view without importing
+- ✅ **Maximum Compatibility** — Works with any editor, not just Cursor
+- ✅ **Public or Private** — Control visibility of shared content
+- ✅ **Permanent Links** — Gists stay accessible on GitHub
+- ✅ **Discoverable** — Public gists searchable on GitHub
+- ✅ **Version History** — GitHub tracks gist changes
+- ✅ **Embedded Viewing** — Gists can be embedded in docs
+
+### Setting Up GitHub Token
+
+**Required for creating Gists:**
+
+1. **Create Personal Access Token**:
+   - Go to GitHub → Settings → Developer settings → Personal access tokens
+   - Generate new token (classic)
+   - Select scope: `gist` (required)
+   - Copy token (starts with `ghp_` or `github_pat_`)
+
+2. **Configure Token in CursorToys**:
+   - Open Command Palette (`Cmd+Shift+P`)
+   - Run **"CursorToys: Configure GitHub Token"**
+   - Paste your token
+   - Token stored securely in VS Code Secrets
+
+**Note**: Token stored securely using VS Code Secrets API. Not visible in settings or files.
+
+### Sharing via Gist
+
+#### Share Single File
+
+1. **Right-click any file** in:
+   - `.cursor/commands/`
+   - `.cursor/rules/`
+   - `.cursor/prompts/`
+   - `.cursor/notepads/`
+   - `.cursor/http/` (request files)
+   - `.cursor/http/environments/` (environment files)
+
+2. **Select** → **"CursorToys: Share via GitHub Gist"**
+
+3. **Choose visibility**:
+   - **Public** — Anyone can see (searchable)
+   - **Private** — Only you can see (unlisted)
+   - Or configure default in settings
+
+4. **Gist created** — URL copied to clipboard
+
+5. **Share URL** — Recipients can:
+   - View in browser
+   - Import with `Cmd+Shift+I` in Cursor
+
+#### Share Folder as Gist Bundle
+
+1. **Right-click folder**:
+   - `.cursor/commands/`
+   - `.cursor/rules/`
+   - `.cursor/prompts/`
+   - `.cursor/notepads/`
+   - `.cursor/http/`
+   - `.cursor/` (entire project)
+
+2. **Select** → **"CursorToys: Share Folder via GitHub Gist"**
+
+3. **Choose visibility** (public or private)
+
+4. **Gist bundle created** with all files
+
+5. **Share URL** — Team gets entire folder structure
+
+### Importing from Gist
+
+**Method 1: Via Import Command**
+
+1. Press **`Cmd+Shift+I`** (Mac) or **`Ctrl+Shift+I`** (Windows/Linux)
+2. Paste Gist URL or ID:
+   - Full URL: `https://gist.github.com/username/abc123`
+   - Raw URL: `https://gist.githubusercontent.com/username/abc123/raw/...`
+   - Just ID: `abc123...`
+3. Files imported to appropriate folders automatically
+
+**Method 2: Browser to Import**
+
+1. Find CursorToys Gist on GitHub
+2. Click **"Raw"** or copy URL
+3. Import in Cursor with `Cmd+Shift+I`
+
+### Gist Configuration
+
+```json
+{
+  // Default visibility when creating Gists
+  "cursorToys.gistDefaultVisibility": "ask"
+}
+```
+
+**Options:**
+- `"ask"` — Prompt each time (default)
+- `"public"` — Always create public gists
+- `"private"` — Always create private gists
+
+### Gist Metadata
+
+CursorToys embeds metadata in Gists for validation:
+
+```json
+{
+  "cursortoys": {
+    "version": "1.3.0",
+    "type": "command",
+    "created": "2026-01-01T12:00:00.000Z",
+    "fileCount": 1,
+    "files": [
+      {
+        "name": "my-command.md",
+        "type": "command",
+        "size": 1234
+      }
+    ]
+  }
+}
+```
+
+**Benefits:**
+- ✅ Validates Gist format on import
+- ✅ Identifies file types automatically
+- ✅ Provides bundle information
+- ✅ Ensures CursorToys compatibility
+
+### Gist vs CursorToys vs Deeplink
+
+| Feature | Deeplink | CursorToys | GitHub Gist |
+|:--------|:---------|:-----------|:------------|
+| **Max Size** | 8KB (URL limit) | No limit (compressed) | 100MB |
+| **Browser Viewing** | ❌ No | ❌ No | ✅ Yes |
+| **Requires Import** | ✅ Yes | ✅ Yes | 🟡 Optional |
+| **Public Discovery** | ❌ No | ❌ No | ✅ Yes (public gists) |
+| **Version History** | ❌ No | ❌ No | ✅ Yes |
+| **Permanent Link** | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Compression** | None | 60-80% | None |
+| **Best For** | Quick sharing | Large files | Public sharing, documentation |
+
+**When to use each:**
+- **Deeplink** — Quick team sharing, small files
+- **CursorToys** — Large files, bypassing URL limits
+- **GitHub Gist** — Public sharing, browser viewing, permanent documentation
+
+### Gist Management Commands
+
+| Command | Description |
+|:--------|:------------|
+| CursorToys: Configure GitHub Token | Set up GitHub Personal Access Token |
+| CursorToys: Remove GitHub Token | Remove stored token |
+| CursorToys: Share via GitHub Gist | Share single file as Gist |
+| CursorToys: Share Folder via GitHub Gist | Share folder as Gist bundle |
+
+### Gist Examples
+
+#### Example 1: Public Command Library
+1. Create useful commands in `.cursor/commands/`
+2. Right-click folder → Share via GitHub Gist → Public
+3. Share gist URL in community forums
+4. Others discover and import your commands
+
+#### Example 2: Team API Setup
+1. Configure HTTP requests and environments
+2. Right-click `.cursor/http/` → Share via Gist → Private
+3. Share URL in team chat
+4. Team members can view in browser or import directly
+
+#### Example 3: Project Documentation
+1. Write project notepads
+2. Share notepads folder via Gist → Public
+3. Link Gist in project README
+4. Contributors can view docs in browser without cloning
+
+## 🗜️ File Minification & Clipboard Optimization
+
+### Requirements
 
 **Manage environment-specific configurations** for your API requests.
 
@@ -795,6 +1107,8 @@ cursortoys://COMMAND:code-review:H4sIAAAAAAAAA...
 | `cursorToys.baseFolder` | `string` | `"cursor"` | Base folder for commands and HTTP files (e.g., `"cursor"`, `"vscode"`, `"ai"`) |
 | `cursorToys.commandsFolder` | `string` | `"cursor"` | Commands folder: `"cursor"` or `"claude"` |
 | `cursorToys.personalCommandsView` | `string` | `"both"` | Personal commands view: `"both"`, `"cursor"`, or `"claude"` |
+| **GitHub Gist** |
+| `cursorToys.gistDefaultVisibility` | `string` | `"ask"` | Default Gist visibility: `"public"`, `"private"`, or `"ask"` |
 | **HTTP Requests** |
 | `cursorToys.httpRequestTimeout` | `number` | `10` | HTTP request timeout in seconds |
 | `cursorToys.httpRequestSaveFile` | `boolean` | `false` | Save HTTP responses to file (vs preview only) |
@@ -973,9 +1287,23 @@ Configure the extension at both workspace and user levels:
 | CursorToys: Share as CursorToys (Command) | Generate CursorToys compressed shareable for command | - |
 | CursorToys: Share as CursorToys (Rule) | Generate CursorToys compressed shareable for rule | - |
 | CursorToys: Share as CursorToys (Prompt) | Generate CursorToys compressed shareable for prompt | - |
-| CursorToys: Import from Link | Import deeplink or CursorToys shareable to create file | `Ctrl+Shift+I` / `Cmd+Shift+I` |
+| CursorToys: Share as CursorToys (Notepad) | Generate CursorToys shareable for notepad | - |
+| CursorToys: Import from Link | Import deeplink, CursorToys shareable, or GitHub Gist | `Ctrl+Shift+I` / `Cmd+Shift+I` |
 | CursorToys: Save as User Command | Save project command as personal command | - |
 | CursorToys: Save as User Prompt | Save project prompt as personal prompt | - |
+| **Project Notepads** |
+| CursorToys: Create New Notepad | Create new notepad in workspace | - |
+| CursorToys: Open Notepad | Open notepad file | - |
+| CursorToys: Share Notepad | Generate shareable for notepad | - |
+| CursorToys: Delete Notepad | Delete notepad | - |
+| CursorToys: Rename Notepad | Rename notepad | - |
+| CursorToys: Reveal Notepad in Folder | Reveal notepad in file system | - |
+| CursorToys: Refresh Notepads | Refresh notepads tree view | - |
+| **GitHub Gist** |
+| CursorToys: Share via GitHub Gist | Share file as GitHub Gist | - |
+| CursorToys: Share Folder via GitHub Gist | Share folder as Gist bundle | - |
+| CursorToys: Configure GitHub Token | Set up GitHub Personal Access Token | - |
+| CursorToys: Remove GitHub Token | Remove stored GitHub token | - |
 | **HTTP Requests** |
 | CursorToys: Send HTTP Request | Execute HTTP request from file | - |
 | CursorToys: Select HTTP Environment | Switch HTTP environment | - |

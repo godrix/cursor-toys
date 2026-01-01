@@ -2,6 +2,206 @@
 
 All notable changes to the "CursorToys" extension will be documented in this file.
 
+## [1.3.0] - 2026-01-01
+
+### Added
+
+#### 📓 **Project Notepads**
+- **Notepads Management**: New workspace-specific notepad system for project documentation
+  - New "Project Notepads" view in Explorer sidebar to browse and manage notepads
+  - Notepads stored in `.{baseFolder}/notepads/` folder (e.g., `.cursor/notepads/`)
+  - Workspace-specific notepads (not personal - tied to current project)
+  - Hierarchical folder structure with drag-and-drop support
+  - Automatic tree view refresh on file changes
+- **Notepad Commands**:
+  - `cursor-toys.createNotepad`: Create new notepad in current workspace
+  - `cursor-toys.openNotepad`: Open notepad file
+  - `cursor-toys.generateNotepadShareable`: Generate shareable for notepad
+  - `cursor-toys.deleteNotepad`: Delete notepad
+  - `cursor-toys.renameNotepad`: Rename notepad
+  - `cursor-toys.revealNotepad`: Reveal notepad in file system
+  - `cursor-toys.refreshNotepads`: Refresh notepads tree view
+- **Notepad Sharing**: Full sharing support for notepads
+  - Share single notepads via CursorToys format
+  - Share entire notepads folder as bundle
+  - Import notepads from shareables and bundles
+  - Context menu integration in `.{baseFolder}/notepads/` folder
+- **Notepad Features**:
+  - Create notepads with markdown format
+  - Organize notepads in subfolders
+  - Drag and drop files between folders
+  - Filter by allowed extensions
+  - Alphabetical sorting
+  - File system watchers for real-time updates
+
+#### 🌐 **GitHub Gist Integration**
+- **Gist Sharing**: Share files and bundles via GitHub Gist
+  - New command `cursor-toys.shareViaGist`: Share single file as GitHub Gist
+  - New command `cursor-toys.shareFolderViaGist`: Share entire folder as Gist bundle
+  - Support for all file types: commands, rules, prompts, notepads, HTTP, environments
+  - Automatic metadata generation with CursorToys format
+  - Gist description with file type and date
+- **Gist Import**: Import files from GitHub Gist
+  - Enhanced `cursor-toys.import` command to accept Gist URLs or IDs
+  - Automatic format detection (Gist URL, ID, deeplink, or CursorToys)
+  - Support for single file and bundle imports from Gist
+  - Validates Gist format and extracts metadata
+- **GitHub Token Management**:
+  - `cursor-toys.configureGitHubToken`: Configure GitHub Personal Access Token
+  - `cursor-toys.removeGitHubToken`: Remove stored GitHub token
+  - Secure token storage using VS Code Secrets API
+  - Token validation before Gist creation
+- **Gist Features**:
+  - Public or private Gist creation
+  - Configurable default visibility via `cursorToys.gistDefaultVisibility` setting
+  - URL copied to clipboard automatically
+  - Support for Gist URLs, raw URLs, and Gist IDs
+  - CursorToys metadata embedded in Gist for format validation
+  - Size validation (100MB GitHub limit)
+  - Bundle support with multiple files
+- **Gist Manager**: Complete Gist management system
+  - Singleton pattern for global access
+  - Token management with validation
+  - Gist creation and fetching
+  - Metadata building and parsing
+  - URL parsing and validation
+  - HTTPS request handling with error management
+
+### Changed
+- **Import Command Enhanced**: Now supports GitHub Gist URLs and IDs
+  - Accepts `gist.github.com` URLs, `gist.githubusercontent.com` raw URLs, and Gist IDs
+  - Automatic format detection (Gist, deeplink, or CursorToys)
+  - Updated prompt text: "supports: files, bundles, deeplinks, Gists"
+  - Validation for all supported formats
+- **Shareable Generator**: Extended to support notepads and Gist creation
+  - Added `generateShareableForNotepadFolder()`: Bundle all notepad files
+  - Added `generateGistShareable()`: Create single-file Gist
+  - Added `generateGistShareableForBundle()`: Create multi-file Gist bundle
+  - Support for notepad type in all shareable functions
+- **Shareable Importer**: Enhanced to handle notepads and Gists
+  - Added `importNotepadBundle()`: Import bundle of notepad files
+  - Added `importFromGist()`: Import files from GitHub Gist
+  - Support for notepad type in import flows
+  - Gist format validation and metadata extraction
+  - Bundle type detection for Gist imports
+- **Utils Enhanced**: Added notepad path helpers
+  - `getNotepadsPath()`: Get path to notepads folder (workspace-specific)
+  - Updated `getFileTypeFromPath()` to detect notepad files
+  - Support for `.{baseFolder}/notepads/` folder structure
+- **Context Menu**: Extended to support notepads and Gist sharing
+  - Added notepad-specific context menu items
+  - Added Gist sharing options for all file types
+  - Gist sharing available for files and folders
+  - Automatic bundle type detection for folders
+- **Tree Provider**: New UserNotepadsTreeProvider for project notepads
+  - Hierarchical folder display
+  - Drag-and-drop between folders
+  - Recursive directory reading
+  - File grouping by folder structure
+  - Only shows notepads from current workspace
+
+### Technical Details
+
+#### New Files
+- **`src/gistManager.ts`**: Complete GitHub Gist integration
+  - GistManager class with singleton pattern
+  - Token management with VS Code Secrets API
+  - Gist creation with validation
+  - Gist fetching and parsing
+  - Metadata building and validation
+  - URL parsing (supports multiple formats)
+  - HTTPS request handling
+  - Error management with user-friendly messages
+- **`src/userNotepadsTreeProvider.ts`**: Tree provider for project notepads
+  - Hierarchical folder structure support
+  - Drag-and-drop functionality
+  - Recursive directory reading
+  - File grouping by folder
+  - Only workspace notepads (not personal)
+  - Context menu integration
+
+#### Enhanced Files
+- **`src/extension.ts`**:
+  - Registered 13 new commands (notepads and Gist)
+  - Added notepad-specific commands with URI/item helper functions
+  - Enhanced import command to support Gist URLs and IDs
+  - Integrated GistManager for Gist operations
+  - Added UserNotepadsTreeProvider registration
+  - Added file system watchers for notepads folder
+  - Extended shareable commands to support notepads
+- **`src/shareableGenerator.ts`**:
+  - Added `generateShareableForNotepadFolder()`: Bundle notepad files
+  - Added `generateGistShareable()`: Create GitHub Gist for single file
+  - Added `generateGistShareableForBundle()`: Create Gist bundle
+  - Extended all bundle functions to include notepads
+  - Support for notepad type throughout
+- **`src/shareableImporter.ts`**:
+  - Added `importNotepadBundle()`: Import notepad bundles
+  - Added `importFromGist()`: Import from GitHub Gist
+  - Added Gist format validation and detection
+  - Support for single file and bundle Gist imports
+  - Extended project bundle to include notepads
+- **`src/utils.ts`**:
+  - Added `getNotepadsPath()`: Get notepads folder path
+  - Extended `getFileTypeFromPath()` to detect notepads
+  - Support for `.{baseFolder}/notepads/` in path detection
+- **`package.json`**:
+  - Version bumped from 1.2.0 to 1.3.0
+  - Added 13 new commands (notepads and Gist)
+  - Added `cursor-toys.userNotepads` view
+  - Added `cursorToys.gistDefaultVisibility` configuration
+  - Extended context menus for notepads and Gist
+  - Updated activation events for new views and commands
+
+#### New Commands
+- `cursor-toys.createNotepad`: Create new notepad
+- `cursor-toys.openNotepad`: Open notepad file
+- `cursor-toys.generateNotepadShareable`: Share notepad
+- `cursor-toys.deleteNotepad`: Delete notepad
+- `cursor-toys.renameNotepad`: Rename notepad
+- `cursor-toys.revealNotepad`: Reveal notepad in folder
+- `cursor-toys.refreshNotepads`: Refresh notepads tree
+- `cursor-toys.shareAsCursorToysNotepad`: Share as CursorToys (Notepad)
+- `cursor-toys.shareAsCursorToysNotepadFolder`: Share folder as bundle
+- `cursor-toys.shareViaGist`: Share file via GitHub Gist
+- `cursor-toys.shareFolderViaGist`: Share folder via GitHub Gist
+- `cursor-toys.importFromGist`: Import from GitHub Gist (integrated into import command)
+- `cursor-toys.configureGitHubToken`: Configure GitHub token
+- `cursor-toys.removeGitHubToken`: Remove GitHub token
+
+#### Configuration Options Added
+- `cursorToys.gistDefaultVisibility`: Default visibility when creating GitHub Gists
+  - Options: `"public"`, `"private"`, `"ask"` (default: `"ask"`)
+  - Allows presetting Gist visibility or prompting each time
+
+#### New View
+- `cursor-toys.userNotepads`: Project Notepads tree view in Explorer sidebar
+  - Shows notepads from current workspace only
+  - Hierarchical folder structure
+  - Drag-and-drop support
+  - Context menu with all notepad actions
+
+### Use Cases
+
+**Project Documentation with Notepads:**
+1. Create notepads in `.cursor/notepads/` for project-specific documentation
+2. Organize in subfolders (e.g., `architecture/`, `decisions/`, `guides/`)
+3. Share individual notepads or entire folders with team
+4. Keep documentation close to code, version-controlled
+
+**Share via GitHub Gist:**
+1. Right-click on any file → "CursorToys: Share via GitHub Gist"
+2. Choose public or private visibility
+3. Gist URL copied to clipboard
+4. Share with anyone (even those without Cursor)
+5. Recipients can import via `Cmd+Shift+I` or view in browser
+
+**Import from Gist:**
+1. Find a CursorToys Gist on GitHub
+2. Press `Cmd+Shift+I` in Cursor
+3. Paste Gist URL or ID
+4. Files imported to appropriate folders automatically
+
 ## [1.2.0] - 2025-12-31
 
 ### Added
