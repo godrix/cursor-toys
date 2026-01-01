@@ -2,7 +2,7 @@
   "name": "cursor-toys",
   "displayName": "CursorToys",
   "description": "🚀 Supercharge your Cursor AI workflow! Share commands instantly, test APIs in-editor, manage personal libraries, and boost team collaboration. The ultimate productivity toolkit for Cursor users.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "godrix",
   "icon": "resources/icon.png",
   "author": {
@@ -82,7 +82,7 @@
       },
       {
         "command": "cursor-toys.import",
-        "title": "CursorToys: Import from Link"
+        "title": "CursorToys: Import"
       },
       {
         "command": "cursor-toys.shareAsCursorToysCommand",
@@ -95,6 +95,50 @@
       {
         "command": "cursor-toys.shareAsCursorToysPrompt",
         "title": "CursorToys: Share as CursorToys (Prompt)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysHttp",
+        "title": "CursorToys: Share as CursorToys (HTTP Request)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysEnv",
+        "title": "CursorToys: Share as CursorToys (Environment)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysHttpWithPath",
+        "title": "CursorToys: Share as CursorToys with Folder Structure (HTTP Request)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysEnvWithPath",
+        "title": "CursorToys: Share as CursorToys with Folder Structure (Environment)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysHttpFolder",
+        "title": "CursorToys: Share Folder as CursorToys (HTTP Requests)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysEnvFolder",
+        "title": "CursorToys: Share Folder as CursorToys (Environments)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysHttpFolderWithEnv",
+        "title": "CursorToys: Share Folder as CursorToys (HTTP + Environments)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysCommandFolder",
+        "title": "CursorToys: Share Folder as CursorToys (Commands Bundle)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysRuleFolder",
+        "title": "CursorToys: Share Folder as CursorToys (Rules Bundle)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysPromptFolder",
+        "title": "CursorToys: Share Folder as CursorToys (Prompts Bundle)"
+      },
+      {
+        "command": "cursor-toys.shareAsCursorToysProject",
+        "title": "CursorToys: Share Project as CursorToys (Complete Bundle)"
       },
       {
         "command": "cursor-toys.save-as-user-command",
@@ -241,12 +285,7 @@
       "explorer/context": [
         {
           "submenu": "cursor-toys",
-          "when": "resourcePath =~ /(\\.(cursor|claude|vscode|ai)\\/(commands|rules|prompts)\\/)/",
-          "group": "navigation"
-        },
-        {
-          "command": "cursor-toys.initializeEnvironments",
-          "when": "explorerResourceIsFolder && resourcePath =~ /\\.(cursor|vscode|ai)\\/http$/",
+          "when": "resourcePath =~ /[\\\\/]\\.(cursor|claude|vscode|ai)[\\\\/](commands|rules|prompts|http)/ || resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)$/",
           "group": "navigation"
         }
       ],
@@ -317,35 +356,83 @@
       "cursor-toys": [
         {
           "command": "cursor-toys.generate-command",
-          "when": "resourcePath =~ /\\.(cursor|claude|vscode|ai)\\/commands\\//"
+          "when": "resourcePath =~ /\\.(cursor|claude|vscode|ai)\\/commands\\// && !explorerResourceIsFolder"
         },
         {
           "command": "cursor-toys.shareAsCursorToysCommand",
-          "when": "resourcePath =~ /\\.(cursor|claude|vscode|ai)\\/commands\\//"
+          "when": "resourcePath =~ /\\.(cursor|claude|vscode|ai)\\/commands\\// && !explorerResourceIsFolder"
         },
         {
           "command": "cursor-toys.save-as-user-command",
-          "when": "resourcePath =~ /\\.(cursor|claude|vscode|ai)\\/commands\\//"
+          "when": "resourcePath =~ /\\.(cursor|claude|vscode|ai)\\/commands\\// && !explorerResourceIsFolder"
+        },
+        {
+          "command": "cursor-toys.shareAsCursorToysCommandFolder",
+          "when": "explorerResourceIsFolder && resourcePath =~ /[\\\\/]\\.(cursor|claude|vscode|ai)[\\\\/]commands($|[\\\\/])/"
         },
         {
           "command": "cursor-toys.generate-rule",
-          "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/rules\\//"
+          "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/rules\\// && !explorerResourceIsFolder"
         },
         {
           "command": "cursor-toys.shareAsCursorToysRule",
-          "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/rules\\//"
+          "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/rules\\// && !explorerResourceIsFolder"
+        },
+        {
+          "command": "cursor-toys.shareAsCursorToysRuleFolder",
+          "when": "explorerResourceIsFolder && resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)[\\\\/]rules($|[\\\\/])/"
         },
         {
           "command": "cursor-toys.generate-prompt",
-          "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/prompts\\//"
+          "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/prompts\\// && !explorerResourceIsFolder"
         },
         {
           "command": "cursor-toys.shareAsCursorToysPrompt",
-          "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/prompts\\//"
+          "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/prompts\\// && !explorerResourceIsFolder"
         },
         {
           "command": "cursor-toys.save-as-user-prompt",
-          "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/prompts\\//"
+          "when": "resourcePath =~ /\\.(cursor|vscode|ai)\\/prompts\\// && !explorerResourceIsFolder"
+        },
+        {
+          "command": "cursor-toys.shareAsCursorToysPromptFolder",
+          "when": "explorerResourceIsFolder && resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)[\\\\/]prompts($|[\\\\/])/"
+        },
+        {
+          "command": "cursor-toys.shareAsCursorToysHttp",
+          "when": "resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)[\\\\/]http[\\\\/].*\\.(req|request)$/ && !explorerResourceIsFolder"
+        },
+        {
+          "command": "cursor-toys.shareAsCursorToysEnv",
+          "when": "resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)[\\\\/]http[\\\\/](environments|\\.environments|__environments__|_env)[\\\\/]\\.env/ && !explorerResourceIsFolder"
+        },
+        {
+          "command": "cursor-toys.shareAsCursorToysHttpWithPath",
+          "when": "resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)[\\\\/]http[\\\\/].*\\.(req|request)$/ && !explorerResourceIsFolder"
+        },
+        {
+          "command": "cursor-toys.shareAsCursorToysEnvWithPath",
+          "when": "resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)[\\\\/]http[\\\\/](environments|\\.environments|__environments__|_env)[\\\\/]\\.env/ && !explorerResourceIsFolder"
+        },
+        {
+          "command": "cursor-toys.shareAsCursorToysHttpFolder",
+          "when": "explorerResourceIsFolder && resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)[\\\\/]http($|[\\\\/])/"
+        },
+        {
+          "command": "cursor-toys.shareAsCursorToysHttpFolderWithEnv",
+          "when": "explorerResourceIsFolder && resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)[\\\\/]http($|[\\\\/])/"
+        },
+        {
+          "command": "cursor-toys.shareAsCursorToysEnvFolder",
+          "when": "explorerResourceIsFolder && resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)[\\\\/]http[\\\\/](environments|\\.environments|__environments__|_env)($|[\\\\/])/"
+        },
+        {
+          "command": "cursor-toys.shareAsCursorToysProject",
+          "when": "explorerResourceIsFolder && resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)$/"
+        },
+        {
+          "command": "cursor-toys.initializeEnvironments",
+          "when": "explorerResourceIsFolder && resourcePath =~ /[\\\\/]\\.(cursor|vscode|ai)[\\\\/]http($|[\\\\/])/"
         }
       ],
       "editor/context": [
@@ -478,6 +565,23 @@
           "type": "string",
           "default": "dev",
           "description": "Default HTTP environment name (used for reference in status bar)"
+        },
+        "cursorToys.environmentsFolder": {
+          "type": "string",
+          "enum": [
+            ".environments",
+            "environments",
+            "__environments__",
+            "_env"
+          ],
+          "enumDescriptions": [
+            "Hidden folder: .environments (recommended)",
+            "Standard folder: environments",
+            "Special folder: __environments__",
+            "Short hidden folder: _env"
+          ],
+          "default": ".environments",
+          "description": "Name of the folder to store HTTP environment files inside the http/ directory"
         },
         "cursorToys.minify.preserveComments": {
           "type": "boolean",
