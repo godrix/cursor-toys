@@ -110,7 +110,7 @@ export class GistManager {
     const token = await vscode.window.showInputBox({
       prompt: 'Enter your GitHub Personal Access Token',
       password: true,
-      placeHolder: 'ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+      placeHolder: 'ghp_YOUR_TOKEN_HERE',
       ignoreFocusOut: true,
       validateInput: (value) => {
         if (!value || value.trim().length === 0) {
