@@ -2,6 +2,58 @@
 
 All notable changes to the "CursorToys" extension will be documented in this file.
 
+## [1.4.0] - 2026-01-01
+
+### Fixed
+- Fixed GitHub token placeholder in README to avoid false positive in package security scan
+  - Changed placeholder from 'ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' to 'ghp_YOUR_TOKEN_HERE'
+  - Prevents vsce package from detecting placeholder as real token
+
+### Added
+
+#### 🎯 **Recommendations System**
+- **Project Context Detection**: Automatically detects project languages, frameworks, and context
+  - Detects languages: JavaScript, TypeScript, Python, Java, Go, Rust, Ruby, PHP, Elixir
+  - Detects frameworks: React, Next.js, Vue, Angular, Svelte, Express, NestJS, Jest, Playwright
+  - Detects special contexts: Git, GitHub workflows, Docker, Kubernetes, Terraform, monorepos
+  - Analyzes package.json, requirements.txt, Cargo.toml, and other project files
+- **Smart Recommendations**: Suggests relevant commands, prompts, and rules based on project context
+  - Automatic popup when opening workspace (configurable interval)
+  - Filters recommendations by detected languages and frameworks
+  - Comes with official curated recommendations out of the box
+  - Supports custom recommendations index (GitHub Gist or raw URL)
+- **Recommendations Browser**: Marketplace-style interface for browsing and installing recommendations
+  - Grid layout with cards showing name, description, type, and tags
+  - Search by name, description, or tags
+  - Filter by type (commands, prompts, rules)
+  - Multi-select installation
+  - Preview recommendations before installing
+  - Dark mode support with VS Code theme integration
+- **YAML Frontmatter Support**: Parse metadata from markdown files
+  - Extract description, tags, category, author, version
+  - Improves discoverability and organization
+  - Compatible with existing files (optional metadata)
+- **Recommendations Commands**:
+  - `cursor-toys.checkRecommendations`: Check recommendations for current project
+  - `cursor-toys.browseRecommendations`: Open recommendations marketplace browser
+  - `cursor-toys.refreshRecommendations`: Clear recommendations cache and refresh
+- **Recommendations Configuration**:
+  - `cursorToys.recommendationsEnabled`: Enable/disable recommendations system (default: true)
+  - `cursorToys.recommendationsCheckOnStartup`: Check on workspace open (default: true)
+  - `cursorToys.recommendationsSuggestInterval`: Days between suggestions (default: 7)
+  - `cursorToys.recommendationsIndexUrl`: URL to remote recommendations index
+  - `cursorToys.recommendationsIndexGistId`: Alternative Gist ID for recommendations index (default: official CursorToys recommendations)
+- **Caching System**: Performance-optimized with memory and disk caching
+  - Memory cache: 1 hour TTL
+  - Disk cache: 24 hours TTL
+  - Automatic cache refresh when expired
+  - Manual cache clear command
+
+### Enhanced
+- **YAML Parsing**: New utility functions in `utils.ts` for parsing YAML frontmatter
+- **Context Detection**: Smart project analysis for better recommendations matching
+- **Import System**: Recommendations use existing import infrastructure for seamless installation
+
 ## [1.3.0] - 2026-01-01
 
 ### Added

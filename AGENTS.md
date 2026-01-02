@@ -40,6 +40,15 @@ ANALYTICS.md      # Documentação completa do sistema de analytics
 - Módulos: CommonJS
 - Sempre usar tipos explícitos em funções exportadas
 - Comentários JSDoc para funções públicas e complexas
+- **Idioma**:
+  - **SEMPRE** usar inglês para:
+    - Nomes de funções, variáveis, classes e tipos
+    - Comentários no código (inclusive JSDoc)
+    - Mensagens de commit
+    - Documentação técnica (README.md, CHANGELOG.md, etc.)
+    - Strings de mensagens ao usuário
+  - Código e documentação em inglês garantem melhor colaboração internacional
+  - Nunca misturar inglês e português no código
 - **Emojis**: Nunca usar emojis no código, mensagens de usuário ou comentários, exceto:
   - Se explicitamente solicitado pelo usuário
   - Em arquivos de documentação (README.md, CHANGELOG.md, etc.)
