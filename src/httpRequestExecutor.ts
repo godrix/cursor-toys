@@ -606,17 +606,17 @@ function extractCurlFromSection(
 }
 
 /**
- * Detects the environment decorator for a section
- * Searches backwards from startLine to find # @env {name}
+ * Finds the environment decorator for a specific section
+ * Only searches backwards from section header until another ## or non-comment line
  * @param document The document to search
  * @param startLine Start line of the section (0-based)
  * @returns Environment name or null if not found
  */
-function getEnvironmentForSection(
+function findSectionEnvironment(
   document: vscode.TextDocument,
   startLine: number
 ): string | null {
-  // First, find the section header (##) at or before startLine
+  // Find the section header (##) at or before startLine
   let sectionHeaderLine = startLine;
   for (let i = startLine; i >= 0; i--) {
     const line = document.lineAt(i).text.trim();
@@ -626,34 +626,131 @@ function getEnvironmentForSection(
     }
   }
   
-  // Now search backwards from section header for # @env decorator
+  // Search backwards from section header for # @env decorator
   // Stop when we find another section header or reach the top
   for (let i = sectionHeaderLine - 1; i >= 0; i--) {
     const line = document.lineAt(i).text.trim();
+    
+    // Skip empty lines
+    if (!line) {
+      continue;
+    }
+    
+    // Match decorator: # @env qa  or  #@env qa
+    const match = line.match(/^#\s*@env\s+(\w+)/i);
+    if (match) {
+      return match[1];
+    }
+    
+    // Stop if we find another section header (no decorator for this section)
+    if (line.startsWith('##')) {
+      return null;
+    }
+    
+    // Stop if we find a non-comment line (no decorator for this section)
+    if (!line.startsWith('#')) {
+      return null;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Finds the environment from the previous section (inheritance)
+ * @param document The document to search
+ * @param startLine Start line of the current section (0-based)
+ * @returns Environment name or null if no previous section
+ */
+function findPreviousSectionEnvironment(
+  document: vscode.TextDocument,
+  startLine: number
+): string | null {
+  // Find the header of the current section
+  let currentSectionLine = -1;
+  for (let i = startLine; i >= 0; i--) {
+    const line = document.lineAt(i).text.trim();
+    if (line.startsWith('##')) {
+      currentSectionLine = i;
+      break;
+    }
+  }
+  
+  if (currentSectionLine === -1) {
+    return null;
+  }
+  
+  // Search for the previous section (next ## above)
+  for (let i = currentSectionLine - 1; i >= 0; i--) {
+    const line = document.lineAt(i).text.trim();
+    if (line.startsWith('##')) {
+      // Found previous section, get its environment recursively
+      return getEnvironmentForSection(document, i);
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Finds the global environment decorator at the top of the file
+ * Searches from top until the first ## is found
+ * @param document The document to search
+ * @returns Environment name or null if not found
+ */
+function findGlobalEnvironment(
+  document: vscode.TextDocument
+): string | null {
+  // Search from top until the first ##
+  for (let i = 0; i < document.lineCount; i++) {
+    const line = document.lineAt(i).text.trim();
+    
+    // Stop when we find the first section header
+    if (line.startsWith('##')) {
+      return null;
+    }
     
     // Skip empty lines and regular comments
     if (!line || (line.startsWith('#') && !line.match(/^#\s*@env/i))) {
       continue;
     }
     
-    // Match: # @env qa  or  #@env qa
+    // Match global decorator
     const match = line.match(/^#\s*@env\s+(\w+)/i);
     if (match) {
       return match[1];
     }
-    
-    // Stop if we find another section header
-    if (line.startsWith('##')) {
-      break;
-    }
-    
-    // Stop if we find a non-comment, non-empty line (like a curl command)
-    if (!line.startsWith('#')) {
-      break;
-    }
   }
   
   return null;
+}
+
+/**
+ * Detects the environment decorator for a section with cascading support
+ * Implements 3-level cascading: section-specific > previous section > global
+ * @param document The document to search
+ * @param startLine Start line of the section (0-based)
+ * @returns Environment name or null if not found
+ */
+function getEnvironmentForSection(
+  document: vscode.TextDocument,
+  startLine: number
+): string | null {
+  // 1. First, try to find section-specific decorator
+  const sectionEnv = findSectionEnvironment(document, startLine);
+  if (sectionEnv) {
+    return sectionEnv;
+  }
+  
+  // 2. If not found, inherit from previous section
+  const previousSectionEnv = findPreviousSectionEnvironment(document, startLine);
+  if (previousSectionEnv) {
+    return previousSectionEnv;
+  }
+  
+  // 3. If no previous section, use global environment
+  const globalEnv = findGlobalEnvironment(document);
+  return globalEnv;
 }
 
 /**

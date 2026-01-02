@@ -83,10 +83,11 @@ export class HttpVariableHoverProvider implements vscode.HoverProvider {
   }
 
   /**
-   * Detects the environment decorator for a line
+   * Detects the environment decorator for a line with cascading support
+   * Implements 3-level cascading: section-specific > previous section > global
    */
   private getEnvironmentForLine(document: vscode.TextDocument, lineNumber: number): string | null {
-    // First, find the section header (##) by searching backwards
+    // 1. First, find the section header (##) by searching backwards
     let sectionHeaderLine = -1;
     for (let i = lineNumber; i >= 0; i--) {
       const line = document.lineAt(i).text.trim();
@@ -101,17 +102,38 @@ export class HttpVariableHoverProvider implements vscode.HoverProvider {
       sectionHeaderLine = lineNumber;
     }
     
-    // Now search backwards from section header for # @env decorator
+    // 2. Try to find section-specific decorator
+    const sectionEnv = this.findSectionEnvironment(document, sectionHeaderLine);
+    if (sectionEnv) {
+      return sectionEnv;
+    }
+    
+    // 3. If not found, inherit from previous section
+    const previousSectionEnv = this.findPreviousSectionEnvironment(document, sectionHeaderLine);
+    if (previousSectionEnv) {
+      return previousSectionEnv;
+    }
+    
+    // 4. If no previous section, use global environment
+    const globalEnv = this.findGlobalEnvironment(document);
+    return globalEnv;
+  }
+
+  /**
+   * Finds the environment decorator for a specific section
+   */
+  private findSectionEnvironment(document: vscode.TextDocument, sectionHeaderLine: number): string | null {
+    // Search backwards from section header for # @env decorator
     // Stop when we find another section header or reach the top
     for (let i = sectionHeaderLine - 1; i >= 0; i--) {
       const line = document.lineAt(i).text.trim();
       
-      // Skip empty lines and regular comments
-      if (!line || (line.startsWith('#') && !line.match(/^#\s*@env/i))) {
+      // Skip empty lines
+      if (!line) {
         continue;
       }
       
-      // Match: # @env qa  or  #@env qa
+      // Match decorator: # @env qa  or  #@env qa
       const match = line.match(/^#\s*@env\s+(\w+)/i);
       if (match) {
         return match[1];
@@ -119,12 +141,56 @@ export class HttpVariableHoverProvider implements vscode.HoverProvider {
       
       // Stop if we find another section header
       if (line.startsWith('##')) {
-        break;
+        return null;
       }
       
-      // Stop if we find a non-comment, non-empty line (like a curl command)
+      // Stop if we find a non-comment line
       if (!line.startsWith('#')) {
-        break;
+        return null;
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Finds the environment from the previous section (inheritance)
+   */
+  private findPreviousSectionEnvironment(document: vscode.TextDocument, currentSectionLine: number): string | null {
+    // Search for the previous section (next ## above)
+    for (let i = currentSectionLine - 1; i >= 0; i--) {
+      const line = document.lineAt(i).text.trim();
+      if (line.startsWith('##')) {
+        // Found previous section, get its environment recursively
+        return this.getEnvironmentForLine(document, i);
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Finds the global environment decorator at the top of the file
+   */
+  private findGlobalEnvironment(document: vscode.TextDocument): string | null {
+    // Search from top until the first ##
+    for (let i = 0; i < document.lineCount; i++) {
+      const line = document.lineAt(i).text.trim();
+      
+      // Stop when we find the first section header
+      if (line.startsWith('##')) {
+        return null;
+      }
+      
+      // Skip empty lines and regular comments
+      if (!line || (line.startsWith('#') && !line.match(/^#\s*@env/i))) {
+        continue;
+      }
+      
+      // Match global decorator
+      const match = line.match(/^#\s*@env\s+(\w+)/i);
+      if (match) {
+        return match[1];
       }
     }
     

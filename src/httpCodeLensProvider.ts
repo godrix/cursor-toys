@@ -28,14 +28,29 @@ export class HttpCodeLensProvider implements vscode.CodeLensProvider {
 
   /**
    * Parses the document to find request sections (marked with ##)
-   * Also detects environment decorators (# @env {name})
+   * Also detects environment decorators (# @env {name}) with cascading support
    */
   private parseRequestSections(document: vscode.TextDocument): RequestSection[] {
     const sections: RequestSection[] = [];
     const lines = document.getText().split('\n');
     
+    // CASCADING SUPPORT: Find global environment at the top of the file
+    let globalEnv: string | null = null;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      // Stop at the first section header
+      if (line.startsWith('##')) {
+        break;
+      }
+      const envMatch = line.match(/^#\s*@env\s+(\w+)/i);
+      if (envMatch) {
+        globalEnv = envMatch[1];
+        break;
+      }
+    }
+    
     let currentSection: RequestSection | null = null;
-    let currentEnv: string | null = null;
+    let currentEnv: string | null = globalEnv; // Initialize with global env
     
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -57,17 +72,16 @@ export class HttpCodeLensProvider implements vscode.CodeLensProvider {
           sections.push(currentSection);
         }
         
-        // Start new section
+        // Start new section WITH INHERITANCE
         currentSection = {
           title: headerMatch[1].trim(),
           titleLine: i,
           startLine: i,
           endLine: lines.length - 1, // Will be updated when next section is found
-          envName: currentEnv // Capture the current environment
+          envName: currentEnv // Inherits from previous section or global
         };
         
-        // Reset environment for next section (each section needs its own decorator)
-        currentEnv = null;
+        // DO NOT reset currentEnv - maintain inheritance cascade
       }
     }
     
@@ -128,6 +142,21 @@ export class HttpCodeLensProvider implements vscode.CodeLensProvider {
     const text = document.getText();
     const lines = text.split('\n');
     
+    // CASCADING SUPPORT: Find global environment at the top of the file
+    let globalEnv: string | null = null;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      // Stop at the first section header
+      if (line.startsWith('##')) {
+        break;
+      }
+      const envMatch = line.match(/^#\s*@env\s+(\w+)/i);
+      if (envMatch) {
+        globalEnv = envMatch[1];
+        break;
+      }
+    }
+    
     // Parse sections with ## headers
     const sections = this.parseRequestSections(document);
     
@@ -174,7 +203,7 @@ export class HttpCodeLensProvider implements vscode.CodeLensProvider {
     }
     
     // Now find curl commands that are NOT in any section
-    let currentEnv: string | null = null;
+    let currentEnv: string | null = globalEnv; // Initialize with global env for standalone curls
     
     for (let i = 0; i < lines.length; i++) {
       // Skip lines already covered by sections
