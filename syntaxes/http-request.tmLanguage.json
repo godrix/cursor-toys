@@ -3,6 +3,28 @@
   "name": "HTTP Request",
   "patterns": [
     {
+      "begin": "/\\*",
+      "end": "\\*/",
+      "name": "comment.block.http-request",
+      "captures": {
+        "0": {
+          "name": "punctuation.definition.comment.http-request"
+        }
+      }
+    },
+    {
+      "match": "^(#\\s*@env)\\s+(\\w+).*$",
+      "name": "meta.preprocessor.env-decorator",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.env"
+        },
+        "2": {
+          "name": "entity.name.type.env-name"
+        }
+      }
+    },
+    {
       "match": "^(##+)\\s+(.+)$",
       "name": "markup.heading.http-request",
       "captures": {
@@ -24,6 +46,15 @@
         }
       },
       "patterns": [
+        {
+          "match": "\\{\\{\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\}\\}",
+          "name": "variable.other.env-variable",
+          "captures": {
+            "1": {
+              "name": "variable.parameter.env-variable"
+            }
+          }
+        },
         {
           "match": "\\b(-[A-Za-z]|--[A-Za-z-]+)\\b",
           "name": "entity.name.tag.curl.option"
