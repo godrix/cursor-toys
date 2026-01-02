@@ -2,6 +2,136 @@
 
 All notable changes to the "CursorToys" extension will be documented in this file.
 
+## [1.4.1] - 2026-01-02
+
+### Added
+
+#### 🔄 **Cascading Environment Decorators for HTTP Requests**
+- **3-Level Environment Cascading**: Environment decorators now cascade through three levels for better flexibility
+  - **Section-specific**: `# @env dev` placed before a section (##) applies only to that section
+  - **Previous section inheritance**: Sections without explicit decorator inherit from previous section
+  - **Global environment**: `# @env prod` at the top of file applies to all sections without explicit decorator
+- **Smart Environment Propagation**: Environment settings cascade down until explicitly changed
+  - Reduces repetition - no need to add `# @env` before every section
+  - More intuitive behavior - sections inherit parent environment by default
+  - Explicit decorators always override inherited values
+- **CodeLens Environment Display**: CodeLens now shows environment name only when variables are present
+  - Format: `Send Request: Section Title [env]` when section has variables
+  - Format: `Send Request: Section Title` when section has no variables
+  - Cleaner UI - environment indicator only shown when relevant
+- **Standalone cURL Support**: Standalone cURL commands (not in sections) also support cascading
+  - Inherits from global environment decorator if present
+  - Environment shown in CodeLens only if variables detected
+- **Hover Provider Cascading**: Variable hover now uses same 3-level cascading logic
+  - Shows correct environment for each variable based on cascade
+  - Recursive environment detection for inheritance chain
+
+### Enhanced
+
+#### 🎨 **Syntax Highlighting for HTTP Request Files**
+- **Environment Decorator Syntax**: New syntax highlighting for `# @env` decorators
+  - `# @env` keyword highlighted as control directive (keyword.control.directive.env)
+  - Environment name highlighted as type entity (entity.name.type.env-name)
+  - Makes decorators visually distinct from regular comments
+- **Variable Syntax Highlighting**: Enhanced highlighting for environment variables
+  - `{{variableName}}` pattern now highlighted as environment variable
+  - Variable name inside braces highlighted separately (variable.parameter.env-variable)
+  - Improves visibility of variables in HTTP request files
+- **Comment Support**: Added block comment support (`/* */`) for HTTP request files
+  - Block comments properly highlighted as comment.block.http-request
+  - Consistent with other language syntax highlighting
+
+### Changed
+- **Version**: Bumped from 1.4.0 to 1.4.1
+- **Environment Detection Logic**: Refactored environment detection into modular functions
+  - `findSectionEnvironment()`: Finds section-specific decorator
+  - `findPreviousSectionEnvironment()`: Finds inherited environment from previous section
+  - `findGlobalEnvironment()`: Finds global environment at file top
+  - `getEnvironmentForSection()`: Orchestrates 3-level cascade
+- **HTTP CodeLens Provider**: Updated to support cascading and conditional environment display
+  - Detects global environment at file start
+  - Initializes section environment with global value
+  - Maintains environment state across sections (no reset)
+  - Shows environment in title only when variables present
+- **HTTP Request Executor**: Updated to use new cascading logic
+  - Applies same 3-level environment detection
+  - Properly resolves variables using cascaded environment
+  - Validates variables against correct environment
+- **HTTP Environment Providers**: Enhanced hover and completion providers
+  - Hover provider uses recursive cascading logic
+  - Shows correct environment name in hover tooltip
+  - Suggests available environments in completion
+
+### Technical Details
+
+#### Enhanced Files
+- **`src/httpCodeLensProvider.ts`**:
+  - Added global environment detection at file start
+  - Changed `currentEnv` initialization to use `globalEnv` instead of `null`
+  - Removed environment reset when starting new sections (maintains cascade)
+  - Added comment explaining inheritance behavior: "DO NOT reset currentEnv - maintain inheritance cascade"
+  - Environment inheritance now explicit: `envName: currentEnv // Inherits from previous section or global`
+- **`src/httpEnvironmentProviders.ts`**:
+  - Refactored `getEnvironmentForLine()` to implement 3-level cascade
+  - Added `findSectionEnvironment()`: Section-specific decorator detection
+  - Added `findPreviousSectionEnvironment()`: Recursive inheritance from previous section
+  - Added `findGlobalEnvironment()`: Global decorator detection at file top
+  - Updated decorator search logic to stop at section boundaries or non-comment lines
+  - Improved comment handling in environment detection
+- **`src/httpRequestExecutor.ts`**:
+  - Refactored `getEnvironmentForSection()` to use modular helper functions
+  - Added `findSectionEnvironment()`: Section-specific decorator detection
+  - Added `findPreviousSectionEnvironment()`: Recursive inheritance detection
+  - Added `findGlobalEnvironment()`: Global decorator detection
+  - Updated environment detection to support 3-level cascading
+  - Consistent behavior with other HTTP environment providers
+- **`syntaxes/http-request.tmLanguage.json`**:
+  - Added block comment syntax pattern (`/* */`)
+  - Added environment decorator pattern (`# @env name`)
+  - Added variable pattern highlighting (`{{variableName}}`)
+  - Captures for keyword and entity name in decorators
+  - Captures for variable parameters
+
+### Use Cases
+
+**Cascading Environments Example:**
+
+```http
+# @env prod
+
+## Get All Users
+curl --request GET \
+  --url {{base_url}}/api/users
+  # Uses 'prod' environment (inherited from global)
+
+# @env dev
+## Create User
+curl --request POST \
+  --url {{base_url}}/api/users \
+  --header 'Content-Type: application/json' \
+  --data '{"name": "John"}'
+  # Uses 'dev' environment (explicit decorator)
+
+## Update User
+curl --request PUT \
+  --url {{base_url}}/api/users/1 \
+  --header 'Content-Type: application/json' \
+  --data '{"name": "Jane"}'
+  # Uses 'dev' environment (inherited from previous section)
+
+# @env staging
+## Delete User
+curl --request DELETE \
+  --url {{base_url}}/api/users/1
+  # Uses 'staging' environment (explicit decorator)
+```
+
+**Benefits:**
+1. **Less Repetition**: Set global environment once at the top, override only when needed
+2. **Better Organization**: Group related sections with same environment
+3. **Clearer Intent**: Explicit decorators show when environment changes
+4. **Flexible Workflow**: Mix environments in single file without repetition
+
 ## [1.4.0] - 2026-01-01
 
 ### Fixed
