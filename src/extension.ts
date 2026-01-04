@@ -211,19 +211,9 @@ export function activate(context: vscode.ExtensionContext) {
           detail: 'Marketplace'
         },
         {
-          label: '$(refresh) Refresh Recommendations',
-          description: 'Update recommendations cache',
-          detail: 'Recommendations'
-        },
-        {
           label: '$(search) Check Recommendations',
           description: 'Check recommendations for current project',
           detail: 'Recommendations'
-        },
-        {
-          label: '$(link) Generate Deeplink',
-          description: 'Generate shareable deeplink from current file',
-          detail: 'Deeplinks'
         },
         {
           label: '$(cloud-download) Import from URL',
@@ -231,19 +221,19 @@ export function activate(context: vscode.ExtensionContext) {
           detail: 'Import'
         },
         {
-          label: '$(globe) Import from Gist',
-          description: 'Import directly from GitHub Gist URL',
-          detail: 'Import'
+          label: '$(note) New Notepad',
+          description: 'Create a new notepad for quick notes',
+          detail: 'Notepads'
         },
         {
-          label: '$(comment) Send to Chat',
-          description: 'Send current file or selection to Cursor chat',
-          detail: 'Chat'
+          label: '$(file-zip) Minify File',
+          description: 'Minify current file (JSON, HTML, CSS, JS, etc)',
+          detail: 'Tools'
         },
         {
-          label: '$(terminal) HTTP Request',
-          description: 'Execute HTTP request from .http file',
-          detail: 'HTTP Client'
+          label: '$(clippy) Trim Clipboard',
+          description: 'Trim and minify clipboard content',
+          detail: 'Tools'
         }
       ];
 
@@ -260,13 +250,11 @@ export function activate(context: vscode.ExtensionContext) {
       // Map selection to command
       const commandMap: { [key: string]: string } = {
         'Open Marketplace': 'cursor-toys.browseRecommendations',
-        'Refresh Recommendations': 'cursor-toys.refreshRecommendations',
         'Check Recommendations': 'cursor-toys.checkRecommendations',
-        'Generate Deeplink': 'cursor-toys.generate',
         'Import from URL': 'cursor-toys.import',
-        'Import from Gist': 'cursor-toys.importFromGist',
-        'Send to Chat': 'cursor-toys.sendToChat',
-        'HTTP Request': 'cursor-toys.http.execute'
+        'New Notepad': 'cursor-toys.createNotepad',
+        'Minify File': 'cursor-toys.minifyFile',
+        'Trim Clipboard': 'cursor-toys.trimClipboard'
       };
 
       const commandId = commandMap[selected.label.replace(/\$\([^)]+\)\s*/, '')];

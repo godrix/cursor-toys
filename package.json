@@ -2,7 +2,7 @@
   "name": "cursor-toys",
   "displayName": "CursorToys",
   "description": "🚀 Supercharge your Cursor AI workflow! Share commands instantly, test APIs in-editor, manage personal libraries, and boost team collaboration. The ultimate productivity toolkit for Cursor users.",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "publisher": "godrix",
   "icon": "resources/icon.png",
   "author": {
@@ -408,6 +408,11 @@
           "group": "1_actions"
         },
         {
+          "command": "cursor-toys.shareViaGist",
+          "when": "view == cursor-toys.userCommands && viewItem == userCommandFile",
+          "group": "1_actions"
+        },
+        {
           "command": "cursor-toys.renameUserCommand",
           "when": "view == cursor-toys.userCommands && viewItem == userCommandFile",
           "group": "1_actions"
@@ -429,6 +434,11 @@
         },
         {
           "command": "cursor-toys.generateUserPromptDeeplink",
+          "when": "view == cursor-toys.userPrompts && viewItem == userPromptFile",
+          "group": "1_actions"
+        },
+        {
+          "command": "cursor-toys.shareViaGist",
           "when": "view == cursor-toys.userPrompts && viewItem == userPromptFile",
           "group": "1_actions"
         },
