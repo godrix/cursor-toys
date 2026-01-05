@@ -23,13 +23,13 @@
 
 ## 🔨 Utilities
 
-CursorToys includes over 8 utility categories to optimize your Cursor AI workflow:
+CursorToys includes over 9 utility categories to optimize your Cursor AI workflow:
 
 |   |   |   |
 |---|---|---|
 | [🎯 Smart Recommendations](#-smart-recommendations) | [🔗 Instant Sharing](#-instant-sharing) | [🌐 In-Editor API Testing](#-in-editor-api-testing) |
-| [📚 Personal Libraries](#-personal-libraries) | [📓 Project Notepads](#-project-notepads) | [🗜️ File Minification](#️-file-minification) |
-| [💬 Chat Integration](#-chat-integration) | [🌐 GitHub Gist Integration](#-github-gist-integration) |   |
+| [📚 Personal Libraries](#-personal-libraries) | [📓 Project Notepads](#-project-notepads) | [🪝 Cursor Hooks](#-cursor-hooks) |
+| [🗜️ File Minification](#️-file-minification) | [💬 Chat Integration](#-chat-integration) | [🌐 GitHub Gist Integration](#-github-gist-integration) |
 
 ### 🎯 Smart Recommendations
 
@@ -92,6 +92,18 @@ CursorToys includes over 8 utility categories to optimize your Cursor AI workflo
 - 🔗 **Shareable** — Generate CursorToys shareables or Gist for individual notepads or entire folders
 - 🎯 **Drag & Drop** — Move notepads between folders easily
 - 🔄 **Auto-Refresh** — File system watchers keep tree view in sync
+
+### 🪝 Cursor Hooks
+
+**Manage Cursor hooks configuration** — Automate workflows with hooks.
+
+- 📄 **Hooks Management** — Visual interface for managing hooks.json files
+- 🏠 **Personal + Project** — Separate hooks for personal (all projects) and project-specific
+- 🗂️ **Visual Tree View** — Browse hooks and associated scripts in Explorer sidebar
+- ✏️ **Easy Management** — Create, share, delete, reveal hooks files
+- 🔗 **Shareable** — Share hooks via CursorToys format or GitHub Gist
+- 📝 **Script Detection** — Automatically detects and displays hook scripts
+- 🎯 **Context Menu** — Right-click actions for all hook operations
 
 ### 🗜️ File Minification
 
@@ -213,12 +225,13 @@ Click the "Send Request" link that appears above → See formatted response!
 
 ## ✨ What's New
 
-**Version 1.4.0 (January 2026)**
+**Version 1.5.0 (January 2026)**
 
 For a detailed look at the latest changes, visit the [CHANGELOG](CHANGELOG.md).
 
 **✨ Highlights**
 
+- ✅ **Cursor Hooks Management** — Complete hooks.json management system
 - ✅ **Smart Recommendations** — Complete recommendation system based on project context
 - ✅ **Marketplace Browser** — Elegant visual interface to explore recommendations
 - ✅ **Project Notepads** — Project-specific markdown documentation in `.cursor/notepads/`
@@ -226,6 +239,13 @@ For a detailed look at the latest changes, visit the [CHANGELOG](CHANGELOG.md).
 - ✅ **HTTP Environments** — Environment variables for HTTP requests
 - ✅ **Advanced Minification** — Support for JSON, HTML, XML, CSS, SVG, JS, TS
 - ✅ **Clipboard Processing** — Smart clipboard minification
+
+### Cursor Hooks Management
+- Visual tree view for hooks.json files (personal and project)
+- Create, share, and manage hooks configurations
+- Automatic detection of hook scripts
+- Share hooks via CursorToys or GitHub Gist
+- Import hooks with `Cmd+Shift+I`
 
 ### Smart Recommendations System
 - Context-based recommendation system for projects

@@ -2,6 +2,140 @@
 
 All notable changes to the "CursorToys" extension will be documented in this file.
 
+## [1.5.0] - 2026-01-04
+
+### Added
+
+#### 🪝 **Cursor Hooks Management**
+- **Hooks File Management**: New system to manage Cursor hooks.json files
+  - New "Cursor Hooks" view in Explorer sidebar to browse and manage hooks
+  - Support for both personal hooks (`~/.cursor/hooks.json`) and project hooks (`workspace/.cursor/hooks.json`)
+  - Visual tree view with hooks file and associated scripts
+  - Automatic tree view refresh on file changes
+- **Hooks Commands**:
+  - `cursor-toys.createHooksFile`: Create new hooks.json file (personal or project)
+  - `cursor-toys.openHooks`: Open hooks.json file in editor
+  - `cursor-toys.deleteHooks`: Delete hooks.json file
+  - `cursor-toys.revealHooks`: Reveal hooks.json in file system
+  - `cursor-toys.shareHooks`: Share hooks.json as CursorToys shareable
+  - `cursor-toys.shareHooksViaGist`: Share hooks.json via GitHub Gist
+  - `cursor-toys.refreshHooks`: Refresh hooks tree view
+- **Hook Scripts Management**: Full support for managing hook scripts referenced in hooks.json
+  - `cursor-toys.openHookScript`: Open hook script file in editor
+  - `cursor-toys.shareHookScript`: Share hook script as shareable
+  - `cursor-toys.shareHookScriptViaGist`: Share hook script via GitHub Gist
+  - `cursor-toys.revealHookScript`: Reveal hook script in file system
+  - `cursor-toys.deleteHookScript`: Delete hook script file
+- **Hooks Sharing**: Complete sharing infrastructure for hooks
+  - Share hooks.json via CursorToys compressed format
+  - Share hooks.json via GitHub Gist with metadata
+  - Import hooks from shareables with `Cmd+Shift+I`
+  - Validation of hooks.json structure before sharing
+  - Support for both personal and project hooks import
+- **Hooks Tree View Features**:
+  - Hierarchical display of hooks.json file and referenced scripts
+  - Automatic detection of hook scripts from hooks.json content
+  - Visual distinction between hooks file and scripts
+  - Context menu with all management options
+  - File system watchers for real-time updates
+
+### Changed
+- **Shareable Generator**: Extended to support hooks type
+  - Added `generateShareableForHooks()`: Generate shareable for hooks.json
+  - Added `generateGistShareableForHooks()`: Create Gist for hooks.json
+  - Validation of hooks.json structure (version and hooks fields required)
+  - Special handling for hooks.json file naming
+- **Shareable Importer**: Enhanced to handle hooks imports
+  - Added `importHooks()`: Import hooks.json from shareable
+  - Support for `cursortoys://HOOKS:` protocol
+  - Hooks import flow with personal/project location choice
+  - Validation of hooks.json structure on import
+- **GistManager**: Updated to support hooks type
+  - Added `'hooks'` to supported types in metadata
+  - Support for hooks type in Gist description building
+- **Utils Enhanced**: Added hooks path helpers
+  - `getHooksPath()`: Get path to hooks.json (personal or project)
+  - `getPersonalHooksPath()`: Get personal hooks.json path (~/.cursor/hooks.json)
+  - `getFileTypeFromPath()`: Extended to detect hooks.json files
+- **File System Watchers**: Added watchers for hooks.json files
+  - Personal hooks watcher (`~/.cursor/hooks.json`)
+  - Project hooks watcher (`workspace/.cursor/hooks.json`)
+  - Automatic tree view refresh on file changes
+
+### Technical Details
+
+#### New Files
+- **`src/hooksManager.ts`**: Complete hooks management system
+  - `createHooksFile()`: Create hooks.json with default structure
+  - `hooksFileExists()`: Check if hooks.json exists
+  - `validateHooksFile()`: Validate hooks.json structure
+  - `getHookScripts()`: Extract script paths from hooks.json
+  - Default hooks template with examples
+- **`src/userHooksTreeProvider.ts`**: Tree provider for hooks
+  - Hierarchical display of hooks and scripts
+  - Support for both personal and project hooks
+  - Context menu integration
+  - File system integration for opening and revealing files
+  - Visual icons for hooks file vs scripts
+
+#### Enhanced Files
+- **`src/extension.ts`**:
+  - Registered UserHooksTreeProvider for hooks view
+  - Added 12 new hooks-related commands
+  - Integrated hooks file watchers for real-time updates
+  - Added helper functions for hooks command arguments
+  - Support for hooks in context menus
+- **`src/shareableGenerator.ts`**:
+  - Added `generateShareableForHooks()` function
+  - Added `generateGistShareableForHooks()` function
+  - Extended type definitions to include `'hooks'`
+  - Validation logic for hooks.json structure
+- **`src/shareableImporter.ts`**:
+  - Added `importHooks()` function for hooks import
+  - Extended type definitions to include `'hooks'`
+  - Support for `cursortoys://HOOKS:` protocol parsing
+  - Hooks destination path handling
+- **`src/gistManager.ts`**:
+  - Extended `CursorToysMetadata` type to include `'hooks'`
+  - Updated type definitions in helper functions
+- **`src/utils.ts`**:
+  - Added `getHooksPath()` function
+  - Added `getPersonalHooksPath()` function
+  - Extended `getFileTypeFromPath()` to detect hooks.json
+- **`package.json`**:
+  - Version bumped from 1.4.2 to 1.5.0
+  - Added `cursor-toys.userHooks` view contribution
+  - Added 12 new hooks commands
+  - Added hooks context menu items
+  - Added view title actions for hooks tree
+  - Added activation events for hooks view
+
+#### New View
+- `cursor-toys.userHooks`: Cursor Hooks tree view in Explorer sidebar
+  - Shows both personal and project hooks.json files
+  - Displays hook scripts referenced in hooks.json
+  - Context menu with all hooks management actions
+
+### Use Cases
+
+**Managing Cursor Hooks:**
+1. Click "Create Hooks File" button in Cursor Hooks view
+2. Choose between Personal (all projects) or Project (workspace-specific)
+3. Edit hooks.json to configure your hooks
+4. Referenced scripts appear automatically in the tree view
+
+**Sharing Hooks:**
+1. Right-click on hooks.json in tree view
+2. Choose "Share Hooks" (CursorToys format) or "Share via GitHub Gist"
+3. Share link with team members
+4. Recipients import with `Cmd+Shift+I`
+
+**Importing Hooks:**
+1. Press `Cmd+Shift+I` in Cursor
+2. Paste hooks shareable link or Gist URL
+3. Choose Personal or Project location
+4. hooks.json is imported and ready to use
+
 ## [1.4.2] - 2026-01-04
 
 ### Added
