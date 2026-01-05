@@ -264,6 +264,92 @@ export class HttpCodeLensProvider implements vscode.CodeLensProvider {
         );
         this.codeLenses.push(copyCodeLens);
       }
+      
+      // Check for REST Client format (HTTP Request File format)
+      // Format: METHOD URL (e.g., GET http://... or GET {{BASE_URL}}/...)
+      const restClientMatch = line.match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(https?:\/\/|\{\{).+$/i);
+      if (restClientMatch) {
+        // Check if there's a ### title before this request
+        let requestTitle: string | null = null;
+        let titleLine = i;
+        
+        // Look backwards for ### separator with title
+        for (let k = i - 1; k >= 0; k--) {
+          const prevLine = lines[k].trim();
+          // Stop if we find another HTTP method line (previous request)
+          if (prevLine.match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(https?:\/\/|\{\{).+$/i)) {
+            break;
+          }
+          // Stop if we find a section header (##)
+          if (prevLine.startsWith('##') && !prevLine.startsWith('###')) {
+            break;
+          }
+          // Check for ### separator with optional title
+          if (prevLine.startsWith('###')) {
+            const titleMatch = prevLine.match(/^###\s+(.+)$/);
+            if (titleMatch && titleMatch[1].trim()) {
+              requestTitle = titleMatch[1].trim();
+              titleLine = k; // Use the ### line for CodeLens position
+            }
+            // Always break when we find ### (with or without title)
+            break;
+          }
+        }
+        
+        // Check if this request has variables
+        const hasVars = this.hasVariables(document, i, lines.length - 1);
+        
+        // Build title with request name if available, environment if has variables
+        let title = requestTitle ? `Send Request: ${requestTitle}` : 'Send Request';
+        if (currentEnv && hasVars) {
+          title += ` [${currentEnv}]`;
+        }
+        
+        // Find end line of this REST Client request
+        // Look for next ### separator (REST Client standard), next ## header, or end of file
+        let endLine = i;
+        for (let j = i + 1; j < lines.length; j++) {
+          const requestLine = lines[j].trim();
+          // Stop at separator ### (REST Client standard - three hashes)
+          if (requestLine.startsWith('###')) {
+            endLine = j - 1;
+            break;
+          }
+          // Stop at next section header
+          if (requestLine.startsWith('##')) {
+            endLine = j - 1;
+            break;
+          }
+          // Stop at next HTTP method line (new request)
+          if (requestLine.match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(https?:\/\/|\{\{).+$/i)) {
+            endLine = j - 1;
+            break;
+          }
+          endLine = j;
+        }
+        
+        // Send Request CodeLens (position on title line if available, otherwise on request line)
+        const sendCodeLens = new vscode.CodeLens(
+          new vscode.Range(titleLine, 0, titleLine, 0),
+          {
+            title: title,
+            command: 'cursor-toys.sendHttpRequest',
+            arguments: [document.uri, i, endLine, requestTitle || undefined]
+          }
+        );
+        this.codeLenses.push(sendCodeLens);
+        
+        // Copy cURL CodeLens (position on title line if available, otherwise on request line)
+        const copyCodeLens = new vscode.CodeLens(
+          new vscode.Range(titleLine, 0, titleLine, 0),
+          {
+            title: '$(copy) Copy as cURL',
+            command: 'cursor-toys.copyCurlCommand',
+            arguments: [document.uri, i, endLine]
+          }
+        );
+        this.codeLenses.push(copyCodeLens);
+      }
     }
     
     // If no CodeLens created at all, create a generic fallback

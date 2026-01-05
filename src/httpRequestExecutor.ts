@@ -30,8 +30,116 @@ interface HttpRequestResult {
 }
 
 /**
+ * Parses REST Client format (HTTP Request File format)
+ * Format: METHOD URL\nHeader: Value\n\nBody
+ * Standard separator: ### (three hashes) for multiple requests
+ * Only the first request is parsed (before the first ### separator)
+ * @param content The file content
+ * @returns The parsed HTTP request configuration or null if parsing fails
+ */
+function parseRestClientFormat(content: string): HttpRequestConfig | null {
+  const trimmed = content.trim();
+  
+  // Split by ### separator (REST Client standard) and take first request
+  const firstRequest = trimmed.split('###')[0].trim();
+  if (!firstRequest) {
+    return null;
+  }
+  
+  // Split lines but preserve original content for body
+  const rawLines = firstRequest.split('\n');
+  const lines = rawLines.map(line => line.trim());
+  
+  if (lines.length === 0) {
+    return null;
+  }
+  
+  // First line should be METHOD URL
+  const firstLine = lines[0];
+  const methodUrlMatch = firstLine.match(/^(\w+)\s+(.+)$/);
+  if (!methodUrlMatch) {
+    return null;
+  }
+  
+  const method = methodUrlMatch[1].toUpperCase();
+  let url = methodUrlMatch[2].trim();
+  
+  // Remove trailing quotes if present (common mistake)
+  url = url.replace(/^["']|["']$/g, '');
+  
+  // Accept URLs that start with http:// or https://, or contain variables like {{BASE_URL}}
+  if (!url || (!url.match(/^https?:\/\//i) && !url.match(/\{\{/))) {
+    return null;
+  }
+  
+  const headers: Record<string, string> = {};
+  let bodyStartIndex = -1;
+  
+  // Parse headers (lines with Header: Value format)
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // Empty line indicates end of headers and start of body
+    if (line === '') {
+      bodyStartIndex = i + 1;
+      break;
+    }
+    
+    // Check if line is a header (format: Header: Value)
+    const colonIndex = line.indexOf(':');
+    if (colonIndex > 0) {
+      const headerKey = line.substring(0, colonIndex).trim();
+      const headerValue = line.substring(colonIndex + 1).trim();
+      if (headerKey && headerValue) {
+        headers[headerKey] = headerValue;
+      }
+    } else {
+      // If line doesn't have colon and is not empty, it might be start of body
+      // But only if it's not a valid HTTP method line (which would be a new request)
+      if (!line.match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+https?:\/\/.+$/i)) {
+        bodyStartIndex = i;
+        break;
+      }
+    }
+  }
+  
+  // Parse body if present (use raw lines to preserve formatting)
+  let body: string | undefined;
+  if (bodyStartIndex >= 0 && bodyStartIndex < rawLines.length) {
+    const bodyLines = rawLines.slice(bodyStartIndex);
+    body = bodyLines.join('\n').trim();
+    if (body === '') {
+      body = undefined;
+    }
+  }
+  
+  return {
+    method,
+    url,
+    headers,
+    body
+  };
+}
+
+/**
+ * Detects if content is in REST Client format
+ * @param content The file content
+ * @returns true if content appears to be REST Client format
+ */
+function isRestClientFormat(content: string): boolean {
+  const trimmed = content.trim();
+  
+  // Check if first line matches METHOD URL pattern
+  // Accept URLs starting with http:// or https://, or containing variables like {{BASE_URL}}
+  const firstLine = trimmed.split('\n')[0].trim();
+  const methodUrlMatch = firstLine.match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(https?:\/\/|\{\{).+$/i);
+  
+  return methodUrlMatch !== null;
+}
+
+/**
  * Parses the content of an HTTP request file
- * Supports both structured JSON format and raw curl commands
+ * Supports structured JSON format, REST Client format, and raw curl commands
  * @param content The file content
  * @returns The parsed HTTP request configuration or null if parsing fails
  */
@@ -51,7 +159,15 @@ export function parseHttpRequest(content: string): HttpRequestConfig | null {
         };
       }
     } catch {
-      // Not valid JSON, continue to curl parsing
+      // Not valid JSON, continue to other formats
+    }
+  }
+  
+  // Try to parse as REST Client format (HTTP Request File)
+  if (isRestClientFormat(trimmed)) {
+    const restClientConfig = parseRestClientFormat(trimmed);
+    if (restClientConfig) {
+      return restClientConfig;
     }
   }
   
@@ -560,13 +676,24 @@ export function getExecutionTime(uri: vscode.Uri): string | undefined {
 }
 
 /**
- * Extracts curl command from a specific section of the document
+ * Converts REST Client format to curl command
+ * @param config The HTTP request configuration
+ * @returns The curl command string
+ */
+function convertRestClientToCurl(config: HttpRequestConfig): string {
+  return buildCurlCommand(config);
+}
+
+/**
+ * Extracts HTTP request content from a specific section of the document
+ * Supports both curl commands and REST Client format
+ * Respects ### separator (stops at separator)
  * @param document The document to extract from
  * @param startLine Start line of the section (0-based)
  * @param endLine End line of the section (0-based)
- * @returns The curl command string or null if not found
+ * @returns The request content string (curl or REST Client format) or null if not found
  */
-function extractCurlFromSection(
+function extractRequestFromSection(
   document: vscode.TextDocument,
   startLine: number,
   endLine: number
@@ -578,7 +705,12 @@ function extractCurlFromSection(
     const line = document.lineAt(i);
     const text = line.text.trim();
     
-    // Skip empty lines and markdown headers
+    // Stop at separator ### (REST Client standard)
+    if (text.startsWith('###')) {
+      break;
+    }
+    
+    // Skip empty lines and markdown headers (but not ###)
     if (text && !text.startsWith('##')) {
       // Remove trailing backslash and whitespace for line continuation
       const cleanedLine = text.replace(/\\\s*$/, '').trim();
@@ -588,10 +720,38 @@ function extractCurlFromSection(
     }
   }
   
+  if (lines.length === 0) {
+    return null;
+  }
+  
+  // Check if it's REST Client format (first line is METHOD URL)
+  const firstLine = lines[0];
+  // Accept URLs that start with http:// or https://, or contain variables like {{BASE_URL}}
+  if (firstLine.match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(https?:\/\/|\{\{).+$/i)) {
+    // Return REST Client format (preserve line breaks and empty lines for body separation)
+    // Rebuild with original line breaks, preserving empty lines
+    const originalLines: string[] = [];
+    for (let i = startLine; i <= endLine && i < document.lineCount; i++) {
+      const line = document.lineAt(i);
+      const text = line.text.trim();
+      
+      // Stop at separator ### (REST Client standard)
+      if (text.startsWith('###')) {
+        break;
+      }
+      
+      // Include all lines except markdown headers (##) but preserve empty lines
+      if (!text.startsWith('##')) {
+        originalLines.push(line.text);
+      }
+    }
+    return originalLines.join('\n');
+  }
+  
+  // Check if it's a curl command
   // Join lines with spaces (backslashes already removed)
   let curlCommand = lines.join(' ').trim();
   
-  // Check if it's a curl command
   if (curlCommand.toLowerCase().startsWith('curl')) {
     return curlCommand;
   }
@@ -600,6 +760,40 @@ function extractCurlFromSection(
   const curlMatch = curlCommand.match(/curl\s+.*/i);
   if (curlMatch) {
     return curlMatch[0];
+  }
+  
+  return null;
+}
+
+/**
+ * Extracts curl command from a specific section of the document
+ * Supports both curl commands and REST Client format (converts to curl)
+ * @param document The document to extract from
+ * @param startLine Start line of the section (0-based)
+ * @param endLine End line of the section (0-based)
+ * @returns The curl command string or null if not found
+ */
+function extractCurlFromSection(
+  document: vscode.TextDocument,
+  startLine: number,
+  endLine: number
+): string | null {
+  const requestContent = extractRequestFromSection(document, startLine, endLine);
+  if (!requestContent) {
+    return null;
+  }
+  
+  // If it's already a curl command, return it
+  if (requestContent.toLowerCase().startsWith('curl')) {
+    return requestContent;
+  }
+  
+  // If it's REST Client format, convert to curl
+  if (isRestClientFormat(requestContent)) {
+    const config = parseRestClientFormat(requestContent);
+    if (config) {
+      return convertRestClientToCurl(config);
+    }
   }
   
   return null;
@@ -782,12 +976,12 @@ export async function executeHttpRequestFromFile(
     
     // If section is specified, extract only that section
     if (startLine !== undefined && endLine !== undefined) {
-      const curlCommand = extractCurlFromSection(document, startLine, endLine);
-      if (!curlCommand) {
-        vscode.window.showErrorMessage('No curl command found in the selected section.');
+      const requestContent = extractRequestFromSection(document, startLine, endLine);
+      if (!requestContent) {
+        vscode.window.showErrorMessage('No HTTP request found in the selected section.');
         return;
       }
-      content = curlCommand;
+      content = requestContent;
       
       // Use section title for response file name if available
       if (sectionTitle) {
@@ -997,12 +1191,12 @@ export async function copyCurlCommand(
     
     // If section is specified, extract only that section
     if (startLine !== undefined && endLine !== undefined) {
-      const curlCommand = extractCurlFromSection(document, startLine, endLine);
-      if (!curlCommand) {
-        vscode.window.showErrorMessage('No curl command found in the selected section.');
+      const requestContent = extractRequestFromSection(document, startLine, endLine);
+      if (!requestContent) {
+        vscode.window.showErrorMessage('No HTTP request found in the selected section.');
         return;
       }
-      content = curlCommand;
+      content = requestContent;
     } else {
       // Use entire file content
       content = document.getText();
@@ -1030,8 +1224,22 @@ export async function copyCurlCommand(
       }
     }
     
+    // Convert to curl if it's REST Client format
+    let curlCommand: string;
+    if (isRestClientFormat(content)) {
+      const config = parseRestClientFormat(content);
+      if (!config) {
+        vscode.window.showErrorMessage('Failed to parse REST Client format.');
+        return;
+      }
+      curlCommand = convertRestClientToCurl(config);
+    } else {
+      // Already in curl format
+      curlCommand = content;
+    }
+    
     // Copy to clipboard
-    await vscode.env.clipboard.writeText(content);
+    await vscode.env.clipboard.writeText(curlCommand);
     
     let message = 'cURL command copied to clipboard';
     if (envName) {
