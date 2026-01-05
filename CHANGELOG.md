@@ -2,6 +2,110 @@
 
 All notable changes to the "CursorToys" extension will be documented in this file.
 
+## [1.5.1] - 2026-01-05
+
+### Added
+
+#### 🌐 **REST Client Format Support for HTTP Requests**
+- **REST Client Format**: Support for REST Client format (HTTP Request File format) in addition to curl commands
+  - Format: `METHOD URL` with headers and body separated by empty line
+  - Use `###` separator (three hashes) for multiple requests in same file
+  - Parse requests with METHOD URL pattern (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS)
+  - Support URLs with variables like `{{BASE_URL}}` in addition to `http://` and `https://`
+  - Convert REST Client format to curl commands for execution
+  - Automatic format detection (tries REST Client format before curl)
+- **CodeLens Support**: Full CodeLens support for REST Client format requests
+  - Show "Send Request" and "Copy as cURL" actions on request lines
+  - Detect `###` separators to identify individual requests
+  - Preserve request titles from `###` separator comments
+  - Support environment variables in URLs and headers
+- **Syntax Highlighting**: Enhanced syntax highlighting for REST Client format
+  - Highlight HTTP methods as keywords
+  - Highlight URLs and environment variables
+  - Highlight headers with proper formatting
+  - Highlight `###` separator as punctuation
+
+#### 🔄 **Environment File Watchers**
+- **File Watchers**: Automatic monitoring of environment file changes
+  - Monitor `.env` file changes in environments folder
+  - Automatically invalidate cache when environment files are modified
+  - Support multiple workspace folders with individual watchers
+  - Fire environment change events to notify listeners
+  - Clean up watchers on workspace folder removal
+  - Dispose watchers properly on extension deactivation
+- **Cache Management**: Improved cache invalidation
+  - Clear cache on file create, change, or delete events
+  - Per-workspace cache management
+  - Per-environment cache clearing support
+
+### Changed
+- **HTTP Request Parsing**: Enhanced to support multiple formats
+  - Try REST Client format parsing before curl parsing
+  - Support both curl commands and REST Client format in same file
+  - Respect `###` separator to stop parsing at request boundaries
+- **Request Extraction**: Refactored to handle both formats
+  - `extractCurlFromSection()` renamed to `extractRequestFromSection()`
+  - Support extraction of REST Client format requests
+  - Preserve original formatting for body content
+
+### Technical Details
+
+#### Enhanced Files
+- **`src/httpRequestExecutor.ts`**:
+  - Added `parseRestClientFormat()`: Parse METHOD URL format requests
+  - Added `isRestClientFormat()`: Detect REST Client format
+  - Added `convertRestClientToCurl()`: Convert format for execution
+  - Updated `parseHttpRequest()`: Try REST Client format before curl
+  - Refactored `extractCurlFromSection()` to `extractRequestFromSection()`
+  - Support for `###` separator detection
+  - Preserve line breaks and empty lines for body separation
+- **`src/httpCodeLensProvider.ts`**:
+  - Added REST Client pattern matching for METHOD URL format
+  - Detect `###` separators to identify individual requests
+  - Support request titles from `###` separator comments
+  - Show CodeLens on request lines with proper positioning
+- **`src/environmentManager.ts`**:
+  - Added `fileWatchers` Map and `workspacePaths` Set
+  - Implemented `setupFileWatchers()`: Initialize watchers on activation
+  - Added `updateFileWatchers()`: Handle workspace folder changes
+  - Added `createFileWatcher()`: Create watcher per workspace
+  - Added `clearEnvironmentCache()`: Clear cache for specific environment
+  - Added `clearWorkspaceCache()`: Clear cache for workspace
+  - Added `dispose()`: Clean up watchers on deactivation
+- **`src/extension.ts`**:
+  - Integrated file watcher setup in `activate()` function
+  - Added watcher disposal in `deactivate()` function
+- **`syntaxes/http-request.tmLanguage.json`**:
+  - Added REST Client format pattern matching
+  - Highlight HTTP methods, URLs, headers, and environment variables
+  - Support `###` separator highlighting as punctuation
+  - Proper scoping for REST Client format elements
+
+### Use Cases
+
+**REST Client Format Example:**
+```http
+### Get All Users
+GET {{BASE_URL}}/api/users
+Authorization: Bearer {{API_KEY}}
+
+### Create User
+POST {{BASE_URL}}/api/users
+Content-Type: application/json
+
+{
+  "name": "John Doe",
+  "email": "john@example.com"
+}
+```
+
+**Benefits:**
+1. **Familiar Format**: Use the same format as VS Code REST Client extension
+2. **Better Readability**: Cleaner syntax than curl commands for simple requests
+3. **Multiple Requests**: Use `###` separator to organize multiple requests in one file
+4. **Environment Variables**: Full support for `{{variable}}` syntax
+5. **Automatic Updates**: Environment files are automatically reloaded when changed
+
 ## [1.5.0] - 2026-01-04
 
 ### Added
