@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { isHttpRequestFile } from './utils';
 import { EnvironmentManager } from './environmentManager';
+import { extractFileVariables } from './httpRequestExecutor';
 
 /**
  * Provides hover information for environment variables in HTTP request files
@@ -36,11 +37,45 @@ export class HttpVariableHoverProvider implements vscode.HoverProvider {
     const envName = this.getEnvironmentForLine(document, position.line);
     
     if (!envName) {
+      // Check if variable is defined with # @var (case-insensitive matching)
+      const fileVariables = extractFileVariables(document, position.line);
+      let fileValue: string | undefined;
+      let fileVarName: string | undefined;
+      
+      // Try case-sensitive first
+      fileValue = fileVariables.get(varName);
+      if (fileValue !== undefined) {
+        fileVarName = varName;
+      } else {
+        // Try case-insensitive
+        for (const [key, value] of fileVariables.entries()) {
+          if (key.toLowerCase() === varName.toLowerCase()) {
+            fileValue = value;
+            fileVarName = key;
+            break;
+          }
+        }
+      }
+      
+      if (fileValue !== undefined && fileVarName) {
+        // Variable is defined with # @var
+        const markdown = new vscode.MarkdownString();
+        markdown.appendMarkdown(`**${varName}** \`[# @var]\`\n\n`);
+        markdown.appendCodeblock(fileValue, 'text');
+        markdown.appendMarkdown('\n\n---\n\n');
+        markdown.appendMarkdown(`_Defined in file with \`# @var ${fileVarName}=...\`_\n\n`);
+        markdown.appendMarkdown('Tip: You can also use `# @env default` to use `.env` file');
+        return new vscode.Hover(markdown);
+      }
+      
+      // No environment and no file variable found
       const markdown = new vscode.MarkdownString();
       markdown.appendMarkdown(`**${varName}**\n\n`);
       markdown.appendMarkdown('_No environment decorator found._\n\n');
-      markdown.appendMarkdown('Tip: Add `# @env default` before the section to use `.env` file\n\n');
-      markdown.appendMarkdown('Example:\n');
+      markdown.appendMarkdown('**Options:**\n\n');
+      markdown.appendMarkdown('1. Define with `# @var`:\n');
+      markdown.appendCodeblock(`# @var ${varName}=your-value`, 'http');
+      markdown.appendMarkdown('\n2. Or use `# @env default` to use `.env` file:\n');
       markdown.appendCodeblock('# @env default\n## My Request\ncurl --request GET \\\n  --url {{base_url}}/api', 'http');
       return new vscode.Hover(markdown);
     }
@@ -73,11 +108,42 @@ export class HttpVariableHoverProvider implements vscode.HoverProvider {
       markdown.appendCodeblock(value, 'text');
       return new vscode.Hover(markdown);
     } else {
+      // Variable not in environment, check if defined with # @var
+      const fileVariables = extractFileVariables(document, position.line);
+      let fileValue: string | undefined;
+      let fileVarName: string | undefined;
+      
+      // Try case-insensitive matching
+      for (const [key, val] of fileVariables.entries()) {
+        if (key.toLowerCase() === varName.toLowerCase()) {
+          fileValue = val;
+          fileVarName = key;
+          break;
+        }
+      }
+      
       const markdown = new vscode.MarkdownString();
       markdown.appendMarkdown(`**${varName}** \`[${envName}]\`\n\n`);
-      markdown.appendMarkdown(`_Variable not defined in \`.env.${envName}\`_\n\n`);
-      markdown.appendMarkdown(`Tip: Add to your environment file:\n`);
-      markdown.appendCodeblock(`${varName.toUpperCase()}=your-value-here`, 'bash');
+      
+      if (fileValue !== undefined && fileVarName) {
+        // Variable is defined with # @var (will override env)
+        markdown.appendMarkdown(`_Variable not defined in \`.env.${envName}\`_\n\n`);
+        markdown.appendMarkdown(`**But defined with \`# @var\`:**\n\n`);
+        markdown.appendCodeblock(fileValue, 'text');
+        markdown.appendMarkdown('\n\n---\n\n');
+        markdown.appendMarkdown(`_Note: \`# @var\` values override environment variables_\n\n`);
+        markdown.appendMarkdown(`Tip: Add to \`.env.${envName}\` to use environment value:\n`);
+        markdown.appendCodeblock(`${varName.toUpperCase()}=your-value-here`, 'bash');
+      } else {
+        // Variable not found anywhere
+        markdown.appendMarkdown(`_Variable not defined in \`.env.${envName}\`_\n\n`);
+        markdown.appendMarkdown(`**Options:**\n\n`);
+        markdown.appendMarkdown(`1. Add to environment file:\n`);
+        markdown.appendCodeblock(`${varName.toUpperCase()}=your-value-here`, 'bash');
+        markdown.appendMarkdown(`\n2. Or define with \`# @var\`:\n`);
+        markdown.appendCodeblock(`# @var ${varName}=your-value`, 'http');
+      }
+      
       return new vscode.Hover(markdown);
     }
   }

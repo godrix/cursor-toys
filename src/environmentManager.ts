@@ -144,6 +144,7 @@ export class EnvironmentManager {
     let result = text;
 
     // Substituir todas as ocorrências de {{variableName}}
+    // Excluir variáveis com @ ({{@VAR_NAME}}) que são processadas via prompt
     // Usar regex para encontrar todas as variáveis
     const variableRegex = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
     

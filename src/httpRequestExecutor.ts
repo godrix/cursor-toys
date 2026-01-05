@@ -54,29 +54,41 @@ function parseRestClientFormat(content: string): HttpRequestConfig | null {
     return null;
   }
   
-  // First line should be METHOD URL
-  const firstLine = lines[0];
-  const methodUrlMatch = firstLine.match(/^(\w+)\s+(.+)$/);
-  if (!methodUrlMatch) {
-    return null;
+  // Find the first line that is an HTTP method (skip comments and empty lines)
+  let methodLineIndex = -1;
+  let method: string | null = null;
+  let url: string | null = null;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Skip empty lines and comments
+    if (line && !line.startsWith('#')) {
+      const methodUrlMatch = line.match(/^(\w+)\s+(.+)$/);
+      if (methodUrlMatch) {
+        const potentialMethod = methodUrlMatch[1].toUpperCase();
+        const potentialUrl = methodUrlMatch[2].trim().replace(/^["']|["']$/g, '');
+        
+        // Check if it's a valid HTTP method and URL
+        if (['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(potentialMethod) &&
+            (potentialUrl.match(/^https?:\/\//i) || potentialUrl.match(/\{\{/))) {
+          methodLineIndex = i;
+          method = potentialMethod;
+          url = potentialUrl;
+          break;
+        }
+      }
+    }
   }
   
-  const method = methodUrlMatch[1].toUpperCase();
-  let url = methodUrlMatch[2].trim();
-  
-  // Remove trailing quotes if present (common mistake)
-  url = url.replace(/^["']|["']$/g, '');
-  
-  // Accept URLs that start with http:// or https://, or contain variables like {{BASE_URL}}
-  if (!url || (!url.match(/^https?:\/\//i) && !url.match(/\{\{/))) {
+  if (!method || !url || methodLineIndex === -1) {
     return null;
   }
   
   const headers: Record<string, string> = {};
   let bodyStartIndex = -1;
   
-  // Parse headers (lines with Header: Value format)
-  for (let i = 1; i < lines.length; i++) {
+  // Parse headers (lines with Header: Value format, starting after the method line)
+  for (let i = methodLineIndex + 1; i < lines.length; i++) {
     const line = lines[i];
     
     // Empty line indicates end of headers and start of body
@@ -128,13 +140,22 @@ function parseRestClientFormat(content: string): HttpRequestConfig | null {
  */
 function isRestClientFormat(content: string): boolean {
   const trimmed = content.trim();
+  const lines = trimmed.split('\n');
   
-  // Check if first line matches METHOD URL pattern
+  // Find the first non-comment, non-empty line that matches METHOD URL pattern
   // Accept URLs starting with http:// or https://, or containing variables like {{BASE_URL}}
-  const firstLine = trimmed.split('\n')[0].trim();
-  const methodUrlMatch = firstLine.match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(https?:\/\/|\{\{).+$/i);
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    // Skip empty lines and comments
+    if (trimmedLine && !trimmedLine.startsWith('#')) {
+      const methodUrlMatch = trimmedLine.match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(https?:\/\/|\{\{).+$/i);
+      if (methodUrlMatch) {
+        return true;
+      }
+    }
+  }
   
-  return methodUrlMatch !== null;
+  return false;
 }
 
 /**
@@ -330,18 +351,69 @@ export async function executeHttpRequest(
       if (error) {
         // Check if it's a timeout
         if (error.signal === 'SIGTERM') {
-          reject(new Error(`Request timeout after ${timeout} seconds`));
+          const timeoutResult: HttpRequestResult = {
+            statusCode: 0,
+            statusText: 'Timeout',
+            headers: {},
+            body: `Request timeout after ${timeout} seconds`,
+            error: `Request timeout after ${timeout} seconds`
+          };
+          resolve(timeoutResult);
           return;
         }
         
         // Check if curl is not found
         if (error.message.includes('curl: command not found') || 
             error.message.includes('curl: not found')) {
-          reject(new Error('curl command not found. Please install curl to use this feature.'));
+          const curlNotFoundResult: HttpRequestResult = {
+            statusCode: 0,
+            statusText: 'Error',
+            headers: {},
+            body: 'curl command not found. Please install curl to use this feature.',
+            error: 'curl command not found. Please install curl to use this feature.'
+          };
+          resolve(curlNotFoundResult);
           return;
         }
         
-        reject(error);
+        // Capture curl errors (like invalid URL, connection errors, etc.)
+        // Format as HTTP response with error details
+        const errorMessage = error.message || String(error);
+        let errorOutput = '';
+        
+        // Combine stdout and stderr to get full raw output
+        if (stdout) {
+          errorOutput += stdout;
+        }
+        if (stderr) {
+          if (errorOutput) errorOutput += '\n';
+          errorOutput += stderr;
+        }
+        // If no output, use error message
+        if (!errorOutput) {
+          errorOutput = errorMessage;
+        }
+        
+        // Remove HTTPSTATUS marker if present
+        errorOutput = errorOutput.replace(/HTTPSTATUS:\d+\s*/g, '').trim();
+        
+        // Try to parse as HTTP response if it looks like one
+        const parsedResponse = parseCurlResponse(stdout, stderr);
+        if (parsedResponse.statusCode > 0) {
+          // It's actually an HTTP response, use it
+          resolve(parsedResponse);
+          return;
+        }
+        
+        // Format as error HTTP response
+        const errorResult: HttpRequestResult = {
+          statusCode: 0,
+          statusText: 'Error',
+          headers: {},
+          body: errorOutput,
+          error: errorMessage
+        };
+        resolve(errorResult);
         return;
       }
       
@@ -598,12 +670,30 @@ function formatXML(xml: string): string {
 /**
  * Formats HTTP response as a string
  * @param result The HTTP request result
+ * @param requestPayload Optional request payload to include at the top
  * @returns Formatted response string
  */
-export function formatHttpResponse(result: HttpRequestResult): string {
-  let response = `HTTP/1.1 ${result.statusCode} ${result.statusText}\n`;
+export function formatHttpResponse(result: HttpRequestResult, requestPayload?: string): string {
+  let response = '';
   
-  // Add headers
+  const statusCode = result.statusCode > 0 ? result.statusCode : 0;
+  const isError = statusCode === 0;
+  
+  // For errors, show response first, then payload at the end
+  // For success, show payload first, then response
+  if (!isError && requestPayload) {
+    // Success: payload at top
+    response += '=== REQUEST PAYLOAD ===\n';
+    response += requestPayload;
+    response += '\n\n';
+    response += '=== RESPONSE ===\n';
+  }
+  
+  // Always format as HTTP response, even for errors
+  const statusText = result.statusText || 'Error';
+  response += `HTTP/1.1 ${statusCode} ${statusText}\n`;
+  
+  // Add headers (if any)
   for (const [key, value] of Object.entries(result.headers)) {
     response += `${key}: ${value}\n`;
   }
@@ -612,9 +702,25 @@ export function formatHttpResponse(result: HttpRequestResult): string {
   response += '\n';
   
   // Format and add body
-  const contentType = result.headers['Content-Type'] || result.headers['content-type'];
-  const formattedBody = formatResponseBody(result.body, contentType);
-  response += formattedBody;
+  if (result.body) {
+    // For errors, body is usually plain text (curl error message)
+    // For HTTP responses, try to format as JSON if applicable
+    if (statusCode > 0) {
+      const contentType = result.headers['Content-Type'] || result.headers['content-type'];
+      const formattedBody = formatResponseBody(result.body, contentType);
+      response += formattedBody;
+    } else {
+      // For curl errors, just output the raw error message
+      response += result.body;
+    }
+  }
+  
+  // For errors, add payload at the end as DEBUG PAYLOAD
+  if (isError && requestPayload) {
+    response += '\n\n';
+    response += '# DEBUG PAYLOAD\n';
+    response += requestPayload;
+  }
   
   return response;
 }
@@ -710,13 +816,12 @@ function extractRequestFromSection(
       break;
     }
     
-    // Skip empty lines and markdown headers (but not ###)
-    if (text && !text.startsWith('##')) {
+    // Skip only markdown headers (##) but keep comments (including # @var), empty lines, and HTTP requests
+    if (!text.startsWith('##')) {
       // Remove trailing backslash and whitespace for line continuation
       const cleanedLine = text.replace(/\\\s*$/, '').trim();
-      if (cleanedLine) {
-        lines.push(cleanedLine);
-      }
+      // Keep the line even if it's empty or a comment (for proper parsing)
+      lines.push(cleanedLine);
     }
   }
   
@@ -724,12 +829,24 @@ function extractRequestFromSection(
     return null;
   }
   
-  // Check if it's REST Client format (first line is METHOD URL)
-  const firstLine = lines[0];
-  // Accept URLs that start with http:// or https://, or contain variables like {{BASE_URL}}
-  if (firstLine.match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(https?:\/\/|\{\{).+$/i)) {
+  // Find the first line that is an HTTP method (skip comments and empty lines)
+  let firstHttpLine: string | null = null;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Skip comments and empty lines
+    if (trimmed && !trimmed.startsWith('#')) {
+      // Check if it's an HTTP method line
+      if (trimmed.match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(https?:\/\/|\{\{).+$/i)) {
+        firstHttpLine = trimmed;
+        break;
+      }
+    }
+  }
+  
+  // Check if it's REST Client format (found HTTP method line)
+  if (firstHttpLine) {
     // Return REST Client format (preserve line breaks and empty lines for body separation)
-    // Rebuild with original line breaks, preserving empty lines
+    // Rebuild with original line breaks, preserving empty lines and comments (including # @var)
     const originalLines: string[] = [];
     for (let i = startLine; i <= endLine && i < document.lineCount; i++) {
       const line = document.lineAt(i);
@@ -740,7 +857,7 @@ function extractRequestFromSection(
         break;
       }
       
-      // Include all lines except markdown headers (##) but preserve empty lines
+      // Include all lines except markdown headers (##) but preserve empty lines and comments
       if (!text.startsWith('##')) {
         originalLines.push(line.text);
       }
@@ -948,6 +1065,382 @@ function getEnvironmentForSection(
 }
 
 /**
+ * Interface for helper functions
+ */
+interface HelperFunction {
+  name: string;
+  description: string;
+  execute: (...args: string[]) => Promise<string> | string;
+}
+
+/**
+ * Registry of helper functions
+ */
+const helperFunctions: Map<string, HelperFunction> = new Map();
+
+/**
+ * Initialize helper functions
+ */
+function initializeHelpers(): void {
+  // Random number helper: @randomIn(min, max)
+  helperFunctions.set('randomIn', {
+    name: 'randomIn',
+    description: 'Generates a random integer between min and max (inclusive)',
+    execute: (min: string, max: string) => {
+      const minNum = parseInt(min, 10);
+      const maxNum = parseInt(max, 10);
+      if (isNaN(minNum) || isNaN(maxNum) || minNum > maxNum) {
+        return '0';
+      }
+      const random = Math.floor(Math.random() * (maxNum - minNum + 1)) + minNum;
+      return random.toString();
+    }
+  });
+
+  // Datetime helper: @datetime or @datetime("format")
+  helperFunctions.set('datetime', {
+    name: 'datetime',
+    description: 'Returns current date/time. Optional format: ISO, timestamp, or custom format',
+    execute: (format?: string) => {
+      const now = new Date();
+      if (!format || format === 'ISO') {
+        return now.toISOString();
+      }
+      if (format === 'timestamp') {
+        return now.getTime().toString();
+      }
+      if (format === 'date') {
+        return now.toISOString().split('T')[0];
+      }
+      if (format === 'time') {
+        return now.toTimeString().split(' ')[0];
+      }
+      // Custom format (simplified)
+      return now.toISOString();
+    }
+  });
+
+  // UUID helper: @uuid()
+  helperFunctions.set('uuid', {
+    name: 'uuid',
+    description: 'Generates a random UUID v4',
+    execute: () => {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+  });
+
+  // Random string helper: @randomString(length)
+  helperFunctions.set('randomString', {
+    name: 'randomString',
+    description: 'Generates a random alphanumeric string of specified length',
+    execute: (length: string = '10') => {
+      const len = parseInt(length, 10) || 10;
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let result = '';
+      for (let i = 0; i < len; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    }
+  });
+}
+
+// Initialize helpers on module load
+initializeHelpers();
+
+/**
+ * Represents a prompt or helper expression
+ */
+interface PromptExpression {
+  type: 'prompt' | 'helper';
+  name: string;
+  label?: string; // For prompts
+  args?: string[]; // For helpers
+  originalMatch: string;
+}
+
+/**
+ * Extracts prompt and helper expressions from content
+ * Supports:
+ * - {{@prompt("label")}} - prompt with custom label (only way to open prompts)
+ * - {{@helper(arg1, arg2)}} - helper function
+ * @param content The content to search
+ * @returns Array of prompt/helper expressions
+ */
+function extractPromptExpressions(content: string): PromptExpression[] {
+  const expressions: PromptExpression[] = [];
+  
+  // Match: {{@prompt("label")}} or {{@helper(arg1, arg2)}}
+  // Only @prompt() opens prompts, not {{@VAR_NAME}}
+  const functionRegex = /\{\{\s*@(\w+)\s*\(\s*([^)]*)\s*\)\s*\}\}/g;
+  let match: RegExpExecArray | null;
+  
+  while ((match = functionRegex.exec(content)) !== null) {
+    const funcName = match[1];
+    const argsStr = match[2];
+    
+    if (funcName === 'prompt') {
+      // Extract label from arguments
+      const labelMatch = argsStr.match(/["']([^"']+)["']/);
+      const label = labelMatch ? labelMatch[1] : argsStr.trim();
+      expressions.push({
+        type: 'prompt',
+        name: `prompt_${expressions.length}`, // Generate unique name
+        label: label || 'Enter value',
+        originalMatch: match[0]
+      });
+    } else if (helperFunctions.has(funcName)) {
+      // Helper function
+      const args = argsStr.split(',').map(arg => arg.trim().replace(/^["']|["']$/g, ''));
+      expressions.push({
+        type: 'helper',
+        name: funcName,
+        args: args,
+        originalMatch: match[0]
+      });
+    }
+  }
+  
+  return expressions;
+}
+
+/**
+ * Extracts prompt variables (variables with @ prefix) from content
+ * Format: {{@prompt("label")}} (only way to open prompts)
+ * @param content The content to search
+ * @returns Array of unique variable names (without @ prefix)
+ * @deprecated Use extractPromptExpressions instead
+ */
+function extractPromptVariables(content: string): string[] {
+  const expressions = extractPromptExpressions(content);
+  return expressions
+    .filter(expr => expr.type === 'prompt')
+    .map(expr => expr.name);
+}
+
+/**
+ * Prompts user for values of prompt expressions
+ * @param expressions Array of prompt expressions
+ * @returns Map of expression original matches to their values, or null if user cancelled
+ */
+async function promptForExpressions(expressions: PromptExpression[]): Promise<Map<string, string> | null> {
+  const values = new Map<string, string>();
+  
+  // Filter only prompt expressions
+  const promptExpressions = expressions.filter(expr => expr.type === 'prompt');
+  
+  for (const expr of promptExpressions) {
+    const value = await vscode.window.showInputBox({
+      prompt: expr.label || `Enter value`,
+      placeHolder: expr.label || `Enter value`,
+      ignoreFocusOut: true
+    });
+    
+    // If user cancelled (undefined), return null
+    if (value === undefined) {
+      return null;
+    }
+    
+    // Store value using original match as key
+    values.set(expr.originalMatch, value || '');
+  }
+  
+  return values;
+}
+
+/**
+ * Executes helper functions
+ * @param expressions Array of helper expressions
+ * @returns Map of expression original matches to their computed values
+ */
+async function executeHelpers(expressions: PromptExpression[]): Promise<Map<string, string>> {
+  const values = new Map<string, string>();
+  
+  // Filter only helper expressions
+  const helperExpressions = expressions.filter(expr => expr.type === 'helper');
+  
+  for (const expr of helperExpressions) {
+    const helper = helperFunctions.get(expr.name);
+    if (helper) {
+      try {
+        const result = helper.execute(...(expr.args || []));
+        // Handle both sync and async helpers
+        const value = result instanceof Promise ? await result : result;
+        values.set(expr.originalMatch, value);
+      } catch (error) {
+        console.error(`Error executing helper ${expr.name}:`, error);
+        values.set(expr.originalMatch, '');
+      }
+    }
+  }
+  
+  return values;
+}
+
+/**
+ * Prompts user for values of variables with @ prefix
+ * @param variables Array of variable names (without @ prefix)
+ * @returns Map of variable names to their values, or null if user cancelled
+ * @deprecated Use promptForExpressions instead
+ */
+async function promptForVariableValues(variables: string[]): Promise<Map<string, string> | null> {
+  const expressions: PromptExpression[] = variables.map(varName => ({
+    type: 'prompt',
+    name: varName,
+    label: `Enter value for ${varName}`,
+    originalMatch: `{{@${varName}}}`
+  }));
+  return promptForExpressions(expressions);
+}
+
+/**
+ * Replaces prompt and helper expressions with their values
+ * @param content The content to process
+ * @param values Map of original matches to their values
+ * @returns Content with expressions replaced
+ */
+function replacePromptExpressions(content: string, values: Map<string, string>): string {
+  let result = content;
+  
+  // Replace all expressions using their original matches as keys
+  for (const [originalMatch, value] of values.entries()) {
+    // Escape special regex characters in the match
+    const escapedMatch = originalMatch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escapedMatch, 'g');
+    result = result.replace(regex, value);
+  }
+  
+  return result;
+}
+
+/**
+ * Replaces prompt variables ({{@prompt("label")}}) with provided values
+ * @param content The content to process
+ * @param values Map of variable names to their values
+ * @returns Content with variables replaced
+ * @deprecated Use replacePromptExpressions instead
+ */
+function replacePromptVariables(content: string, values: Map<string, string>): string {
+  let result = content;
+  const promptVariableRegex = /\{\{\s*@([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
+  
+  result = result.replace(promptVariableRegex, (match, varName) => {
+    const value = values.get(varName);
+    return value !== undefined ? value : match;
+  });
+  
+  return result;
+}
+
+/**
+ * Extracts file-level variables defined with # @var decorator
+ * Format: # @var VAR_NAME=value or # @var VAR_NAME value
+ * Supports cascading: global > section-specific
+ * @param document The document to search
+ * @param startLine Optional start line for section-based extraction
+ * @returns Map of variable names to their values
+ */
+export function extractFileVariables(
+  document: vscode.TextDocument,
+  startLine?: number
+): Map<string, string> {
+  const variables = new Map<string, string>();
+  
+  // Determine search range
+  let searchStart = 0;
+  let searchEnd = document.lineCount;
+  
+  if (startLine !== undefined) {
+    // For section-based, find the section header and search from there
+    let sectionHeaderLine = startLine;
+    for (let i = startLine; i >= 0; i--) {
+      const line = document.lineAt(i).text.trim();
+      if (line.startsWith('##')) {
+        sectionHeaderLine = i;
+        break;
+      }
+    }
+    searchStart = sectionHeaderLine;
+    
+    // Find end of section (next ## or end of file)
+    for (let i = startLine + 1; i < document.lineCount; i++) {
+      const line = document.lineAt(i).text.trim();
+      if (line.startsWith('##')) {
+        searchEnd = i;
+        break;
+      }
+    }
+  }
+  
+  // First, collect global variables (before first ##)
+  for (let i = 0; i < document.lineCount; i++) {
+    const line = document.lineAt(i).text.trim();
+    
+    // Stop at first section header for global vars
+    if (line.startsWith('##')) {
+      break;
+    }
+    
+    // Match: # @var VAR_NAME=value or # @var VAR_NAME value
+    const match = line.match(/^#\s*@var\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=\s*)?(.+)?$/i);
+    if (match) {
+      const varName = match[1];
+      const value = match[2] ? match[2].trim() : '';
+      // Remove quotes if present
+      const cleanValue = value.replace(/^["']|["']$/g, '');
+      variables.set(varName, cleanValue);
+    }
+  }
+  
+  // Then, collect section-specific variables (override global)
+  if (startLine !== undefined) {
+    for (let i = searchStart; i < searchEnd; i++) {
+      const line = document.lineAt(i).text.trim();
+      
+      // Match: # @var VAR_NAME=value or # @var VAR_NAME value
+      const match = line.match(/^#\s*@var\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=\s*)?(.+)?$/i);
+      if (match) {
+        const varName = match[1];
+        const value = match[2] ? match[2].trim() : '';
+        // Remove quotes if present
+        const cleanValue = value.replace(/^["']|["']$/g, '');
+        // Section-specific variables override global ones
+        variables.set(varName, cleanValue);
+      }
+    }
+  }
+  
+  return variables;
+}
+
+/**
+ * Replaces file variables ({{VAR_NAME}}) with values from file definitions
+ * @param content The content to process
+ * @param values Map of variable names to their values
+ * @returns Content with variables replaced
+ */
+function replaceFileVariables(content: string, values: Map<string, string>): string {
+  let result = content;
+  const variableRegex = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
+  
+  result = result.replace(variableRegex, (match, varName) => {
+    // Only replace if it's not a prompt/helper expression ({{@prompt()}} or {{@helper()}})
+    if (match.includes('@')) {
+      return match;
+    }
+    
+    const value = values.get(varName);
+    return value !== undefined ? value : match;
+  });
+  
+  return result;
+}
+
+/**
  * Executes HTTP request from file and saves response
  * @param requestUri The URI of the request file
  * @param startLine Optional start line for section-based execution
@@ -994,6 +1487,40 @@ export async function executeHttpRequestFromFile(
       // Use entire file content
       content = document.getText();
       responsePath = baseResponsePath;
+    }
+    
+    // Process prompt and helper expressions first
+    const expressions = extractPromptExpressions(content);
+    if (expressions.length > 0) {
+      // Separate prompts and helpers
+      const promptExpressions = expressions.filter(expr => expr.type === 'prompt');
+      const helperExpressions = expressions.filter(expr => expr.type === 'helper');
+      
+      // Execute helpers first (they don't require user input)
+      const helperValues = await executeHelpers(helperExpressions);
+      
+      // Then prompt user for prompt expressions
+      const promptValues = promptExpressions.length > 0 
+        ? await promptForExpressions(promptExpressions)
+        : new Map<string, string>();
+      
+      if (promptValues === null) {
+        // User cancelled the prompts
+        return;
+      }
+      
+      // Merge helper and prompt values
+      const allValues = new Map([...helperValues, ...promptValues]);
+      
+      // Replace all expressions with their values
+      content = replacePromptExpressions(content, allValues);
+    }
+    
+    // Process file-level variables (# @var VAR_NAME=value) second
+    const fileVariables = extractFileVariables(document, startLine);
+    if (fileVariables.size > 0) {
+      // Replace file variables with their defined values
+      content = replaceFileVariables(content, fileVariables);
     }
     
     // Detect environment decorator for this section
@@ -1051,7 +1578,25 @@ export async function executeHttpRequestFromFile(
         // Measure execution time
         const startTime = Date.now();
         
-        // Execute request
+        // Prepare request payload for display
+        let requestPayload: string | undefined;
+        if (config.body) {
+          if (typeof config.body === 'string') {
+            // Try to parse and format if it's JSON
+            try {
+              const parsed = JSON.parse(config.body);
+              requestPayload = JSON.stringify(parsed, null, 2);
+            } catch {
+              // Not JSON, use as-is
+              requestPayload = config.body;
+            }
+          } else {
+            // Object, stringify with formatting
+            requestPayload = JSON.stringify(config.body, null, 2);
+          }
+        }
+        
+        // Execute request (now always resolves, even on error)
         const result = await executeHttpRequest(config, timeout);
         
         // Calculate execution time
@@ -1060,8 +1605,8 @@ export async function executeHttpRequestFromFile(
         
         progress.report({ increment: 50, message: 'Processing response...' });
         
-        // Format response
-        const responseText = formatHttpResponse(result);
+        // Format response with payload
+        const responseText = formatHttpResponse(result, requestPayload);
         
         let responseUri: vscode.Uri | undefined;
         let responseDoc: vscode.TextDocument;
@@ -1149,20 +1694,53 @@ export async function executeHttpRequestFromFile(
           });
         }
         
-        // Build success message
-        let message = `HTTP request executed successfully. Status: ${result.statusCode} (${executionTimeSeconds}s)`;
-        if (envUsed && envName) {
-          message += ` [${envName}]`;
+        // Build message based on result
+        let message: string;
+        if (result.error || result.statusCode === 0) {
+          // Error occurred (curl error, timeout, etc.)
+          message = `Request failed: ${result.statusText || result.error || 'Unknown error'} (${executionTimeSeconds}s)`;
+          if (envUsed && envName) {
+            message += ` [${envName}]`;
+          }
+          vscode.window.showWarningMessage(message);
+        } else if (result.statusCode >= 400) {
+          // HTTP error (4xx, 5xx)
+          message = `HTTP ${result.statusCode} ${result.statusText} (${executionTimeSeconds}s)`;
+          if (envUsed && envName) {
+            message += ` [${envName}]`;
+          }
+          vscode.window.showWarningMessage(message);
+        } else {
+          // Success
+          message = `HTTP request executed successfully. Status: ${result.statusCode} (${executionTimeSeconds}s)`;
+          if (envUsed && envName) {
+            message += ` [${envName}]`;
+          }
+          if (!saveFile) {
+            message += ' - Preview mode';
+          }
+          vscode.window.showInformationMessage(message);
         }
-        if (!saveFile) {
-          message += ' - Preview mode';
-        }
-        
-        vscode.window.showInformationMessage(message);
       } catch (error) {
+        // This should rarely happen now since executeHttpRequest always resolves
         const errorMessage = error instanceof Error ? error.message : String(error);
         vscode.window.showErrorMessage(`Failed to execute HTTP request: ${errorMessage}`);
-        throw error;
+        // Still try to save error response if possible
+        try {
+          const errorResult: HttpRequestResult = {
+            statusCode: 0,
+            statusText: 'Error',
+            headers: {},
+            body: errorMessage,
+            error: errorMessage
+          };
+          const responseText = formatHttpResponse(errorResult);
+          const responseUri = vscode.Uri.file(responsePath);
+          const encoder = new TextEncoder();
+          await vscode.workspace.fs.writeFile(responseUri, encoder.encode(responseText));
+        } catch (saveError) {
+          // Ignore save errors
+        }
       }
     });
   } catch (error) {
@@ -1200,6 +1778,40 @@ export async function copyCurlCommand(
     } else {
       // Use entire file content
       content = document.getText();
+    }
+    
+    // Process prompt and helper expressions first
+    const expressions = extractPromptExpressions(content);
+    if (expressions.length > 0) {
+      // Separate prompts and helpers
+      const promptExpressions = expressions.filter(expr => expr.type === 'prompt');
+      const helperExpressions = expressions.filter(expr => expr.type === 'helper');
+      
+      // Execute helpers first (they don't require user input)
+      const helperValues = await executeHelpers(helperExpressions);
+      
+      // Then prompt user for prompt expressions
+      const promptValues = promptExpressions.length > 0 
+        ? await promptForExpressions(promptExpressions)
+        : new Map<string, string>();
+      
+      if (promptValues === null) {
+        // User cancelled the prompts
+        return;
+      }
+      
+      // Merge helper and prompt values
+      const allValues = new Map([...helperValues, ...promptValues]);
+      
+      // Replace all expressions with their values
+      content = replacePromptExpressions(content, allValues);
+    }
+    
+    // Process file-level variables (# @var VAR_NAME=value) second
+    const fileVariables = extractFileVariables(document, startLine);
+    if (fileVariables.size > 0) {
+      // Replace file variables with their defined values
+      content = replaceFileVariables(content, fileVariables);
     }
     
     // Detect environment decorator for this section
