@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as zlib from 'zlib';
-import { sanitizeFileName, getCommandsPath, getPromptsPath, getRulesPath, getNotepadsPath, getHttpPath, getEnvironmentsPath } from './utils';
+import { sanitizeFileName, getCommandsPath, getPromptsPath, getRulesPath, getNotepadsPath, getHttpPath, getEnvironmentsPath, getHooksPath } from './utils';
 import { GistManager, GistResponse, CursorToysMetadata } from './gistManager';
 
 interface ShareableParams {
-  type: 'command' | 'prompt' | 'rule' | 'notepad' | 'http' | 'env';
+  type: 'command' | 'prompt' | 'rule' | 'notepad' | 'http' | 'env' | 'hooks';
   name: string;
   content: string; // Already decompressed
   relativePath?: string; // Optional: relative path for HTTP_PATH and ENV_PATH types
@@ -40,6 +40,10 @@ export async function importShareable(shareableUrl: string): Promise<void> {
     }
     if (shareableUrl.startsWith('cursortoys://PROJECT_BUNDLE:')) {
       await importProjectBundle(shareableUrl);
+      return;
+    }
+    if (shareableUrl.startsWith('cursortoys://HOOKS:')) {
+      await importHooks(shareableUrl);
       return;
     }
 
@@ -630,6 +634,111 @@ async function importProjectBundle(bundleUrl: string): Promise<void> {
 }
 
 /**
+ * Imports a hooks.json file from a shareable URL
+ * @param shareableUrl Shareable URL in format: cursortoys://HOOKS:name:compressedData
+ */
+async function importHooks(shareableUrl: string): Promise<void> {
+  try {
+    // Remove protocol
+    const withoutProtocol = shareableUrl.substring('cursortoys://HOOKS:'.length);
+    
+    // Split to get name:data
+    const parts = withoutProtocol.split(':');
+    if (parts.length < 2) {
+      vscode.window.showErrorMessage('Invalid hooks shareable format');
+      return;
+    }
+
+    // Extract compressed data (everything after the first colon)
+    const compressedData = parts.slice(1).join(':');
+    
+    // Decompress content
+    const content = decodeAndDecompress(compressedData);
+    
+    // Validate JSON structure
+    try {
+      const parsed = JSON.parse(content);
+      if (!parsed.version || !parsed.hooks) {
+        vscode.window.showErrorMessage('Invalid hooks.json structure. Must have version and hooks fields.');
+        return;
+      }
+    } catch (error) {
+      vscode.window.showErrorMessage(`Invalid JSON format: ${error}`);
+      return;
+    }
+
+    // Ask if user wants to save as Project or Personal
+    const itemLocation = await vscode.window.showQuickPick(
+      [
+        { 
+          label: 'Personal hooks', 
+          description: 'Available in all projects (~/.cursor/hooks.json)', 
+          value: true 
+        },
+        { 
+          label: 'Project hooks', 
+          description: 'Specific to this workspace', 
+          value: false 
+        }
+      ],
+      { placeHolder: 'Where do you want to save this hooks.json?' }
+    );
+
+    if (itemLocation === undefined) {
+      return;
+    }
+
+    const isPersonal = itemLocation.value;
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    
+    if (!workspaceFolder && !isPersonal) {
+      vscode.window.showErrorMessage('No workspace open');
+      return;
+    }
+
+    const workspacePath = workspaceFolder?.uri.fsPath || '';
+    const hooksPath = getHooksPath(workspacePath, isPersonal);
+    
+    // Check if file already exists
+    const fileUri = vscode.Uri.file(hooksPath);
+    let fileExists = false;
+    try {
+      await vscode.workspace.fs.stat(fileUri);
+      fileExists = true;
+    } catch {
+      // File doesn't exist
+    }
+
+    if (fileExists) {
+      const overwrite = await vscode.window.showWarningMessage(
+        'hooks.json already exists. Do you want to overwrite it?',
+        'Yes',
+        'No'
+      );
+      if (overwrite !== 'Yes') {
+        return;
+      }
+    }
+
+    // Create directory if needed
+    const dirPath = path.dirname(hooksPath);
+    await createDirectoryRecursive(dirPath);
+
+    // Write file
+    const fileContent = Buffer.from(content, 'utf8');
+    await vscode.workspace.fs.writeFile(fileUri, fileContent);
+
+    vscode.window.showInformationMessage('Hooks imported successfully!');
+    
+    // Open file
+    const document = await vscode.workspace.openTextDocument(fileUri);
+    await vscode.window.showTextDocument(document);
+  } catch (error) {
+    vscode.window.showErrorMessage(`Error importing hooks: ${error}`);
+  }
+}
+
+/**
  * Parses the shareable URL and extracts parameters
  * @param url Shareable URL
  * @returns Parsed parameters or null if invalid
@@ -657,7 +766,7 @@ export function parseShareableUrl(url: string): ShareableParams | null {
 
     // Extract type (handle both TYPE and TYPE_PATH)
     const typeStr = parts[0].toUpperCase();
-    let type: 'command' | 'prompt' | 'notepad' | 'rule' | 'http' | 'env';
+    let type: 'command' | 'prompt' | 'notepad' | 'rule' | 'http' | 'env' | 'hooks';
     let hasPath = false;
     let relativePath: string | undefined;
     
@@ -673,6 +782,8 @@ export function parseShareableUrl(url: string): ShareableParams | null {
       type = 'http';
     } else if (typeStr === 'ENV') {
       type = 'env';
+    } else if (typeStr === 'HOOKS') {
+      type = 'hooks';
     } else if (typeStr === 'HTTP_PATH') {
       type = 'http';
       hasPath = true;
@@ -680,7 +791,7 @@ export function parseShareableUrl(url: string): ShareableParams | null {
       type = 'env';
       hasPath = true;
     } else {
-      vscode.window.showErrorMessage(`Invalid type: ${typeStr}. Must be COMMAND, PROMPT, NOTEPAD, RULE, HTTP, ENV, HTTP_PATH, or ENV_PATH.`);
+      vscode.window.showErrorMessage(`Invalid type: ${typeStr}. Must be COMMAND, PROMPT, NOTEPAD, RULE, HTTP, ENV, HOOKS, HTTP_PATH, or ENV_PATH.`);
       return null;
     }
 
@@ -835,6 +946,11 @@ function getDestinationPath(
         fileName = params.name.startsWith('.env') ? params.name : `.env.${params.name}`;
       }
       break;
+    case 'hooks':
+      // Hooks files (hooks.json)
+      folderPath = path.dirname(getHooksPath(workspacePath, isPersonal));
+      fileName = 'hooks.json';
+      break;
   }
 
   return { folderPath, fileName };
@@ -961,13 +1077,15 @@ async function importSingleFileFromGist(
   }
 
   // Determine file type
-  let fileType: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env';
+  let fileType: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | 'hooks';
   
   if (metadata && metadata.cursortoys.type !== 'bundle') {
     fileType = metadata.cursortoys.type;
   } else {
-    // Fallback: detect by extension
-    if (fileName.endsWith('.md') || fileName.endsWith('.mdc')) {
+    // Fallback: detect by extension or filename
+    if (fileName === 'hooks.json') {
+      fileType = 'hooks';
+    } else if (fileName.endsWith('.md') || fileName.endsWith('.mdc')) {
       // Default to command if can't determine
       fileType = 'command';
     } else if (fileName.endsWith('.req') || fileName.endsWith('.request')) {
@@ -980,19 +1098,32 @@ async function importSingleFileFromGist(
     }
   }
 
-  // For commands and prompts, ask if user wants to save as Project or Personal
+  // For commands, prompts, and hooks, ask if user wants to save as Project or Personal
   let isPersonal = false;
-  if (fileType === 'command' || fileType === 'prompt') {
-    const itemType = fileType === 'command' ? 'command' : 'prompt';
+  if (fileType === 'command' || fileType === 'prompt' || fileType === 'hooks') {
+    let itemType: string;
+    let folderName: string;
+    
+    if (fileType === 'command') {
+      itemType = 'command';
+      folderName = 'commands';
+    } else if (fileType === 'prompt') {
+      itemType = 'prompt';
+      folderName = 'prompts';
+    } else {
+      itemType = 'hooks';
+      folderName = '';
+    }
+    
     const itemLocation = await vscode.window.showQuickPick(
       [
         { 
-          label: `Personal ${itemType}s`, 
-          description: `Available in all projects (~/.cursor/${itemType}s)`, 
+          label: `Personal ${itemType}${fileType === 'hooks' ? '' : 's'}`, 
+          description: `Available in all projects (~/.cursor/${folderName || 'hooks.json'})`, 
           value: true 
         },
         { 
-          label: `Project ${itemType}s`, 
+          label: `Project ${itemType}${fileType === 'hooks' ? '' : 's'}`, 
           description: 'Specific to this workspace', 
           value: false 
         }
@@ -1039,6 +1170,9 @@ async function importSingleFileFromGist(
       break;
     case 'env':
       folderPath = getEnvironmentsPath(workspacePath);
+      break;
+    case 'hooks':
+      folderPath = path.dirname(getHooksPath(workspacePath, isPersonal));
       break;
   }
 

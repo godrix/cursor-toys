@@ -30,7 +30,7 @@ export interface GistResponse {
 export interface CursorToysMetadata {
   cursortoys: {
     version: string;
-    type: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | 'bundle';
+    type: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | 'hooks' | 'bundle';
     bundleType?: 'command_bundle' | 'rule_bundle' | 'prompt_bundle' | 'notepad_bundle' | 'http_bundle' | 'project_bundle';
     created: string;
     fileCount: number;
@@ -344,7 +344,7 @@ export class GistManager {
    * Constrói a descrição do Gist com metadata
    */
   public buildGistDescription(
-    type: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | 'bundle',
+    type: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | 'hooks' | 'bundle',
     fileName: string,
     bundleType?: string
   ): string {
@@ -357,7 +357,7 @@ export class GistManager {
    * Cria metadata para um Gist
    */
   public buildMetadata(
-    type: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | 'bundle',
+    type: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | 'hooks' | 'bundle',
     files: Array<{ name: string; type: string; size: number }>,
     bundleType?: string
   ): CursorToysMetadata {

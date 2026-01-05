@@ -2,15 +2,17 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { generateDeeplink } from './deeplinkGenerator';
 import { importDeeplink } from './deeplinkImporter';
-import { generateShareable, generateShareableWithPath, generateShareableForHttpFolder, generateShareableForEnvFolder, generateShareableForHttpFolderWithEnv, generateShareableForCommandFolder, generateShareableForRuleFolder, generateShareableForPromptFolder, generateShareableForNotepadFolder, generateShareableForProject, generateGistShareable, generateGistShareableForBundle } from './shareableGenerator';
+import { generateShareable, generateShareableWithPath, generateShareableForHttpFolder, generateShareableForEnvFolder, generateShareableForHttpFolderWithEnv, generateShareableForCommandFolder, generateShareableForRuleFolder, generateShareableForPromptFolder, generateShareableForNotepadFolder, generateShareableForProject, generateGistShareable, generateGistShareableForBundle, generateShareableForHooks, generateGistShareableForHooks } from './shareableGenerator';
 import { importShareable, importFromGist } from './shareableImporter';
-import { getFileTypeFromPath, isAllowedExtension, getUserHomePath, getCommandsPath, getCommandsFolderName, sanitizeFileName, getPersonalCommandsPaths, getPromptsPath, getPersonalPromptsPaths, getNotepadsPath, getBaseFolderName, getHttpPath, getEnvironmentsPath, getEnvironmentsFolderName } from './utils';
+import { getFileTypeFromPath, isAllowedExtension, getUserHomePath, getCommandsPath, getCommandsFolderName, sanitizeFileName, getPersonalCommandsPaths, getPromptsPath, getPersonalPromptsPaths, getNotepadsPath, getBaseFolderName, getHttpPath, getEnvironmentsPath, getEnvironmentsFolderName, getHooksPath, getPersonalHooksPath } from './utils';
 import { DeeplinkCodeLensProvider } from './codelensProvider';
 import { HttpCodeLensProvider } from './httpCodeLensProvider';
 import { EnvCodeLensProvider } from './envCodeLensProvider';
 import { UserCommandsTreeProvider, CommandFileItem } from './userCommandsTreeProvider';
 import { UserPromptsTreeProvider, PromptFileItem } from './userPromptsTreeProvider';
 import { UserNotepadsTreeProvider, NotepadFileItem } from './userNotepadsTreeProvider';
+import { UserHooksTreeProvider, HooksFileItem } from './userHooksTreeProvider';
+import { createHooksFile, hooksFileExists, validateHooksFile } from './hooksManager';
 import { sendToChat, sendSelectionToChat, buildPromptDeeplink, MAX_DEEPLINK_LENGTH } from './sendToChat';
 import { AnnotationPanel, AnnotationParams } from './annotationPanel';
 import { executeHttpRequestFromFile, getExecutionTime, copyCurlCommand } from './httpRequestExecutor';
@@ -1439,6 +1441,384 @@ export function activate(context: vscode.ExtensionContext) {
     dragAndDropController: userNotepadsTreeProvider
   });
 
+  // Register User Hooks Tree Provider
+  const userHooksTreeProvider = new UserHooksTreeProvider();
+  const userHooksTreeView = vscode.window.createTreeView('cursor-toys.userHooks', {
+    treeDataProvider: userHooksTreeProvider,
+    showCollapseAll: false
+  });
+
+  /**
+   * Helper function to get URI from hooks command argument (can be HooksFileItem or vscode.Uri)
+   */
+  function getHooksUriFromArgument(arg: HooksFileItem | vscode.Uri | undefined): vscode.Uri | null {
+    if (!arg) {
+      return null;
+    }
+    if (arg instanceof vscode.Uri) {
+      return arg;
+    }
+    if ('uri' in arg) {
+      return arg.uri;
+    }
+    return null;
+  }
+
+  /**
+   * Helper function to get file path from hooks command argument
+   */
+  function getHooksFilePathFromArgument(arg: HooksFileItem | vscode.Uri | undefined): string | null {
+    if (!arg) {
+      return null;
+    }
+    if (arg instanceof vscode.Uri) {
+      return arg.fsPath;
+    }
+    if ('filePath' in arg) {
+      return arg.filePath;
+    }
+    return null;
+  }
+
+  /**
+   * Helper function to get file name from hooks command argument
+   */
+  function getHooksFileNameFromArgument(arg: HooksFileItem | vscode.Uri | undefined): string {
+    if (!arg) {
+      return 'file';
+    }
+    if (arg instanceof vscode.Uri) {
+      return path.basename(arg.fsPath);
+    }
+    if ('label' in arg) {
+      return arg.label;
+    }
+    return 'file';
+  }
+
+  // Command to create hooks file
+  const createHooksFileCommand = vscode.commands.registerCommand(
+    'cursor-toys.createHooksFile',
+    async () => {
+      try {
+        // Ask if user wants personal or project hooks
+        const location = await vscode.window.showQuickPick(
+          [
+            { 
+              label: 'Personal hooks', 
+              description: 'Available in all projects (~/.cursor/hooks.json)', 
+              value: true 
+            },
+            { 
+              label: 'Project hooks', 
+              description: 'Specific to this workspace', 
+              value: false 
+            }
+          ],
+          { placeHolder: 'Where do you want to create the hooks.json file?' }
+        );
+
+        if (location === undefined) {
+          return;
+        }
+
+        const isPersonal = location.value;
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        
+        if (!workspaceFolder && !isPersonal) {
+          vscode.window.showErrorMessage('No workspace open');
+          return;
+        }
+
+        const workspacePath = workspaceFolder?.uri.fsPath || '';
+        const hooksPath = getHooksPath(workspacePath, isPersonal);
+
+        // Check if file already exists
+        if (await hooksFileExists(hooksPath)) {
+          const overwrite = await vscode.window.showWarningMessage(
+            'hooks.json already exists. Do you want to overwrite it?',
+            'Yes',
+            'No'
+          );
+          if (overwrite !== 'Yes') {
+            return;
+          }
+        }
+
+        // Create hooks file
+        await createHooksFile(hooksPath);
+
+        vscode.window.showInformationMessage('Hooks file created successfully!');
+        
+        // Refresh tree view
+        userHooksTreeProvider.refresh();
+        
+        // Open file
+        const document = await vscode.workspace.openTextDocument(vscode.Uri.file(hooksPath));
+        await vscode.window.showTextDocument(document);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error creating hooks file: ${error}`);
+      }
+    }
+  );
+
+  // Command to open hooks file
+  const openHooksCommand = vscode.commands.registerCommand(
+    'cursor-toys.openHooks',
+    async (arg: HooksFileItem | vscode.Uri | undefined) => {
+      try {
+        const uri = getHooksUriFromArgument(arg);
+        if (!uri) {
+          vscode.window.showErrorMessage('No hooks file specified');
+          return;
+        }
+
+        const document = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(document);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error opening hooks file: ${error}`);
+      }
+    }
+  );
+
+  // Command to delete hooks file
+  const deleteHooksCommand = vscode.commands.registerCommand(
+    'cursor-toys.deleteHooks',
+    async (arg: HooksFileItem | vscode.Uri | undefined) => {
+      try {
+        const uri = getHooksUriFromArgument(arg);
+        if (!uri) {
+          vscode.window.showErrorMessage('No hooks file specified');
+          return;
+        }
+
+        const confirmation = await vscode.window.showWarningMessage(
+          'Are you sure you want to delete this hooks.json file?',
+          'Yes',
+          'No'
+        );
+
+        if (confirmation === 'Yes') {
+          await vscode.workspace.fs.delete(uri);
+          vscode.window.showInformationMessage('Hooks file deleted successfully!');
+          userHooksTreeProvider.refresh();
+        }
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error deleting hooks file: ${error}`);
+      }
+    }
+  );
+
+  // Command to reveal hooks file in folder
+  const revealHooksCommand = vscode.commands.registerCommand(
+    'cursor-toys.revealHooks',
+    async (arg: HooksFileItem | vscode.Uri | undefined) => {
+      try {
+        const uri = getHooksUriFromArgument(arg);
+        if (!uri) {
+          vscode.window.showErrorMessage('No hooks file specified');
+          return;
+        }
+
+        await vscode.commands.executeCommand('revealFileInOS', uri);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error revealing hooks file: ${error}`);
+      }
+    }
+  );
+
+  // Command to share hooks via deeplink
+  const shareHooksCommand = vscode.commands.registerCommand(
+    'cursor-toys.shareHooks',
+    async (arg: HooksFileItem | vscode.Uri | undefined) => {
+      try {
+        const filePath = getHooksFilePathFromArgument(arg);
+        if (!filePath) {
+          vscode.window.showErrorMessage('No hooks file specified');
+          return;
+        }
+
+        // Validate hooks file
+        if (!(await validateHooksFile(filePath))) {
+          return; // Error already shown by validateHooksFile
+        }
+
+        const shareable = await generateShareableForHooks(filePath);
+        if (shareable) {
+          await vscode.env.clipboard.writeText(shareable);
+          vscode.window.showInformationMessage('Hooks shared successfully! Link copied to clipboard.');
+        }
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error sharing hooks: ${error}`);
+      }
+    }
+  );
+
+  // Command to share hooks via Gist
+  const shareHooksViaGistCommand = vscode.commands.registerCommand(
+    'cursor-toys.shareHooksViaGist',
+    async (arg: HooksFileItem | vscode.Uri | undefined) => {
+      try {
+        const filePath = getHooksFilePathFromArgument(arg);
+        if (!filePath) {
+          vscode.window.showErrorMessage('No hooks file specified');
+          return;
+        }
+
+        // Validate hooks file
+        if (!(await validateHooksFile(filePath))) {
+          return; // Error already shown by validateHooksFile
+        }
+
+        const gistUrl = await generateGistShareableForHooks(filePath, context);
+        if (gistUrl) {
+          await vscode.env.clipboard.writeText(gistUrl);
+          vscode.window.showInformationMessage('Hooks shared via Gist! URL copied to clipboard.');
+        }
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error sharing hooks via Gist: ${error}`);
+      }
+    }
+  );
+
+  // Command to refresh hooks tree view
+  const refreshHooksCommand = vscode.commands.registerCommand(
+    'cursor-toys.refreshHooks',
+    () => {
+      userHooksTreeProvider.refresh();
+    }
+  );
+
+  // Command to open hook script
+  const openHookScriptCommand = vscode.commands.registerCommand(
+    'cursor-toys.openHookScript',
+    async (arg: HooksFileItem | vscode.Uri | undefined) => {
+      try {
+        const uri = getHooksUriFromArgument(arg);
+        if (!uri) {
+          vscode.window.showErrorMessage('No hook script specified');
+          return;
+        }
+
+        const document = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(document);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error opening hook script: ${error}`);
+      }
+    }
+  );
+
+  // Command to share hook script via deeplink
+  const shareHookScriptCommand = vscode.commands.registerCommand(
+    'cursor-toys.shareHookScript',
+    async (arg: HooksFileItem | vscode.Uri | undefined) => {
+      try {
+        const filePath = getHooksFilePathFromArgument(arg);
+        if (!filePath) {
+          vscode.window.showErrorMessage('No hook script specified');
+          return;
+        }
+
+        // Check if file exists
+        try {
+          await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+        } catch {
+          vscode.window.showErrorMessage('Hook script file not found');
+          return;
+        }
+
+        // Generate shareable link using generic function (auto-detect type)
+        const shareable = await generateShareable(filePath);
+        if (shareable) {
+          await vscode.env.clipboard.writeText(shareable);
+          vscode.window.showInformationMessage('Hook script shared successfully! Link copied to clipboard.');
+        }
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error sharing hook script: ${error}`);
+      }
+    }
+  );
+
+  // Command to share hook script via Gist
+  const shareHookScriptViaGistCommand = vscode.commands.registerCommand(
+    'cursor-toys.shareHookScriptViaGist',
+    async (arg: HooksFileItem | vscode.Uri | undefined) => {
+      try {
+        const filePath = getHooksFilePathFromArgument(arg);
+        if (!filePath) {
+          vscode.window.showErrorMessage('No hook script specified');
+          return;
+        }
+
+        // Check if file exists
+        try {
+          await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+        } catch {
+          vscode.window.showErrorMessage('Hook script file not found');
+          return;
+        }
+
+        // Share via Gist using generic function
+        const gistUrl = await generateGistShareable(filePath, undefined, context);
+        if (gistUrl) {
+          await vscode.env.clipboard.writeText(gistUrl);
+          vscode.window.showInformationMessage('Hook script shared via Gist! URL copied to clipboard.');
+        }
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error sharing hook script via Gist: ${error}`);
+      }
+    }
+  );
+
+  // Command to reveal hook script in folder
+  const revealHookScriptCommand = vscode.commands.registerCommand(
+    'cursor-toys.revealHookScript',
+    async (arg: HooksFileItem | vscode.Uri | undefined) => {
+      try {
+        const uri = getHooksUriFromArgument(arg);
+        if (!uri) {
+          vscode.window.showErrorMessage('No hook script specified');
+          return;
+        }
+
+        await vscode.commands.executeCommand('revealFileInOS', uri);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error revealing hook script: ${error}`);
+      }
+    }
+  );
+
+  // Command to delete hook script
+  const deleteHookScriptCommand = vscode.commands.registerCommand(
+    'cursor-toys.deleteHookScript',
+    async (arg: HooksFileItem | vscode.Uri | undefined) => {
+      try {
+        const uri = getHooksUriFromArgument(arg);
+        const fileName = getHooksFileNameFromArgument(arg);
+        
+        if (!uri) {
+          vscode.window.showErrorMessage('No hook script specified');
+          return;
+        }
+
+        // Confirm deletion
+        const confirm = await vscode.window.showWarningMessage(
+          `Are you sure you want to delete the hook script '${fileName}'?`,
+          'Delete',
+          'Cancel'
+        );
+
+        if (confirm === 'Delete') {
+          await vscode.workspace.fs.delete(uri);
+          userHooksTreeProvider.refresh();
+          vscode.window.showInformationMessage(`Hook script '${fileName}' deleted successfully`);
+        }
+      } catch (error) {
+        vscode.window.showErrorMessage(`Error deleting hook script: ${error}`);
+      }
+    }
+  );
+
   /**
    * Helper function to get URI from notepad command argument (can be NotepadFileItem or vscode.Uri)
    */
@@ -2404,6 +2784,40 @@ export function activate(context: vscode.ExtensionContext) {
 
   let userPromptsWatchers = createPromptsWatchers();
 
+  // File system watchers for hooks.json files
+  const createHooksWatchers = (): vscode.FileSystemWatcher[] => {
+    const watchers: vscode.FileSystemWatcher[] = [];
+    
+    // Personal hooks
+    const personalHooksPath = getPersonalHooksPath();
+    const personalHooksDir = path.dirname(personalHooksPath);
+    const personalWatcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(personalHooksDir, 'hooks.json')
+    );
+    personalWatcher.onDidCreate(() => userHooksTreeProvider.refresh());
+    personalWatcher.onDidDelete(() => userHooksTreeProvider.refresh());
+    personalWatcher.onDidChange(() => userHooksTreeProvider.refresh());
+    watchers.push(personalWatcher);
+    
+    // Project hooks (if workspace exists)
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (workspaceFolder) {
+      const baseFolderName = getBaseFolderName();
+      const projectHooksDir = path.join(workspaceFolder.uri.fsPath, `.${baseFolderName}`);
+      const projectWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(projectHooksDir, 'hooks.json')
+      );
+      projectWatcher.onDidCreate(() => userHooksTreeProvider.refresh());
+      projectWatcher.onDidDelete(() => userHooksTreeProvider.refresh());
+      projectWatcher.onDidChange(() => userHooksTreeProvider.refresh());
+      watchers.push(projectWatcher);
+    }
+    
+    return watchers;
+  };
+
+  let userHooksWatchers = createHooksWatchers();
+
   // File system watchers for notepads folder
   const createNotepadsWatchers = (): vscode.FileSystemWatcher[] => {
     const watchers: vscode.FileSystemWatcher[] = [];
@@ -2463,6 +2877,9 @@ export function activate(context: vscode.ExtensionContext) {
   userNotepadsWatchers.forEach(watcher => {
     context.subscriptions.push(watcher);
   });
+  userHooksWatchers.forEach(watcher => {
+    context.subscriptions.push(watcher);
+  });
 
   context.subscriptions.push(
     httpResponseProviderDisposable,
@@ -2519,6 +2936,19 @@ export function activate(context: vscode.ExtensionContext) {
     revealNotepad,
     renameNotepad,
     refreshNotepads,
+    userHooksTreeView,
+    createHooksFileCommand,
+    openHooksCommand,
+    deleteHooksCommand,
+    revealHooksCommand,
+    shareHooksCommand,
+    shareHooksViaGistCommand,
+    refreshHooksCommand,
+    openHookScriptCommand,
+    shareHookScriptCommand,
+    shareHookScriptViaGistCommand,
+    revealHookScriptCommand,
+    deleteHookScriptCommand,
     configWatcher,
     sendToChatCommand,
     sendSelectionToChatCommand,

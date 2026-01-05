@@ -22,11 +22,17 @@ export function validateUrlLength(url: string): boolean {
 /**
  * Detects the file type based on the path
  */
-export function getFileTypeFromPath(filePath: string): 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | null {
+export function getFileTypeFromPath(filePath: string): 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | 'hooks' | null {
   const normalizedPath = filePath.replace(/\\/g, '/');
   const baseFolderName = getBaseFolderName();
   const environmentsFolderName = getEnvironmentsFolderName();
   
+  // Hooks file (hooks.json)
+  if (normalizedPath.endsWith('/hooks.json') && 
+      (normalizedPath.includes('/.cursor/') || 
+       normalizedPath.includes(`/.${baseFolderName}/`))) {
+    return 'hooks';
+  }
   // Commands can be in .cursor/commands/, .claude/commands/, or custom base folder
   if (normalizedPath.includes('/.cursor/commands/') || 
       normalizedPath.includes('/.claude/commands/') ||
@@ -369,5 +375,28 @@ export function extractTagsFromFrontmatter(content: string): string[] {
     return frontmatter.tags.map((tag: string) => tag.toLowerCase().trim()).filter((tag: string) => tag.length > 0);
   }
   return [];
+}
+
+/**
+ * Gets the path to hooks.json file
+ * @param workspacePath Workspace root path
+ * @param isPersonal If true, returns personal hooks path (~/.cursor/hooks.json)
+ * @returns Path to hooks.json
+ */
+export function getHooksPath(workspacePath: string, isPersonal: boolean): string {
+  if (isPersonal) {
+    return getPersonalHooksPath();
+  }
+  const baseFolderName = getBaseFolderName();
+  return path.join(workspacePath, `.${baseFolderName}`, 'hooks.json');
+}
+
+/**
+ * Gets the personal hooks.json path (~/.cursor/hooks.json)
+ * @returns Path to personal hooks.json
+ */
+export function getPersonalHooksPath(): string {
+  const homeDir = os.homedir();
+  return path.join(homeDir, '.cursor', 'hooks.json');
 }
 

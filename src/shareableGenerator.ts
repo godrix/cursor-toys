@@ -14,7 +14,7 @@ const MAX_CONTENT_SIZE = 50 * 1024 * 1024; // 50MB limit for safety
  */
 export async function generateShareable(
   filePath: string,
-  forcedType?: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env'
+  forcedType?: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | 'hooks'
 ): Promise<string | null> {
   try {
     // Read configuration
@@ -31,7 +31,7 @@ export async function generateShareable(
     }
 
     // Detect or use forced type
-    let fileType: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | null;
+    let fileType: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | 'hooks' | null;
     if (forcedType) {
       fileType = forcedType;
     } else {
@@ -126,7 +126,7 @@ export function compressAndEncode(content: string): string {
  * @returns Shareable URL
  */
 export function buildShareableUrl(
-  type: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env',
+  type: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | 'hooks',
   fileName: string,
   compressedData: string
 ): string {
@@ -1054,7 +1054,7 @@ export async function generateShareableForProject(
  */
 export async function generateGistShareable(
   filePath: string,
-  forcedType?: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env',
+  forcedType?: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | 'hooks',
   context?: vscode.ExtensionContext
 ): Promise<string | null> {
   try {
@@ -1091,7 +1091,7 @@ export async function generateGistShareable(
     }
 
     // Detect or use forced type
-    let fileType: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | null;
+    let fileType: 'command' | 'rule' | 'prompt' | 'notepad' | 'http' | 'env' | 'hooks' | null;
     if (forcedType) {
       fileType = forcedType;
     } else {
@@ -1374,6 +1374,156 @@ export async function generateGistShareableForBundle(
     return gistUrl;
   } catch (error) {
     vscode.window.showErrorMessage(`Error creating Gist bundle: ${error}`);
+    return null;
+  }
+}
+
+/**
+ * Generates a shareable link for a hooks.json file
+ * @param filePath File path to hooks.json
+ * @returns Shareable URL in format: cursortoys://HOOKS:name:compressedData
+ */
+export async function generateShareableForHooks(
+  filePath: string
+): Promise<string | null> {
+  try {
+    // Check if file exists
+    const uri = vscode.Uri.file(filePath);
+    try {
+      await vscode.workspace.fs.stat(uri);
+    } catch {
+      vscode.window.showErrorMessage(`File not found: ${filePath}`);
+      return null;
+    }
+
+    // Validate that it's a hooks.json file
+    const fileName = path.basename(filePath);
+    if (fileName !== 'hooks.json') {
+      vscode.window.showErrorMessage('File must be named hooks.json');
+      return null;
+    }
+
+    // Read file content
+    const document = await vscode.workspace.openTextDocument(uri);
+    const content = document.getText();
+
+    // Validate content size
+    if (content.length > MAX_CONTENT_SIZE) {
+      vscode.window.showErrorMessage(
+        `File too large (${(content.length / 1024 / 1024).toFixed(2)} MB). Maximum size is 50 MB.`
+      );
+      return null;
+    }
+
+    // Validate JSON structure (basic check)
+    try {
+      const parsed = JSON.parse(content);
+      if (!parsed.version || !parsed.hooks) {
+        vscode.window.showErrorMessage('Invalid hooks.json structure. Must have version and hooks fields.');
+        return null;
+      }
+    } catch (error) {
+      vscode.window.showErrorMessage(`Invalid JSON format: ${error}`);
+      return null;
+    }
+
+    // Compress and encode content
+    const compressedData = compressAndEncode(content);
+
+    // Build shareable URL
+    const shareable = `cursortoys://HOOKS:hooks:${compressedData}`;
+
+    return shareable;
+  } catch (error) {
+    vscode.window.showErrorMessage(`Error generating shareable for hooks: ${error}`);
+    return null;
+  }
+}
+
+/**
+ * Generates a GitHub Gist for a hooks.json file
+ * @param filePath File path to hooks.json
+ * @param context Extension context for GistManager
+ * @returns Gist URL or null if failed
+ */
+export async function generateGistShareableForHooks(
+  filePath: string,
+  context?: vscode.ExtensionContext
+): Promise<string | null> {
+  try {
+    if (!context) {
+      vscode.window.showErrorMessage('Extension context not available');
+      return null;
+    }
+
+    const gistManager = GistManager.getInstance(context);
+
+    // Ensure token is configured
+    const hasToken = await gistManager.ensureTokenConfigured();
+    if (!hasToken) {
+      return null;
+    }
+
+    // Determine visibility
+    const isPublic = await gistManager.determineVisibility();
+    if (isPublic === null) {
+      return null; // User cancelled
+    }
+
+    // Check if file exists
+    const uri = vscode.Uri.file(filePath);
+    try {
+      await vscode.workspace.fs.stat(uri);
+    } catch {
+      vscode.window.showErrorMessage(`File not found: ${filePath}`);
+      return null;
+    }
+
+    // Validate that it's a hooks.json file
+    const fileName = path.basename(filePath);
+    if (fileName !== 'hooks.json') {
+      vscode.window.showErrorMessage('File must be named hooks.json');
+      return null;
+    }
+
+    // Read file content
+    const document = await vscode.workspace.openTextDocument(uri);
+    const content = document.getText();
+
+    // Validate JSON structure (basic check)
+    try {
+      const parsed = JSON.parse(content);
+      if (!parsed.version || !parsed.hooks) {
+        vscode.window.showErrorMessage('Invalid hooks.json structure. Must have version and hooks fields.');
+        return null;
+      }
+    } catch (error) {
+      vscode.window.showErrorMessage(`Invalid JSON format: ${error}`);
+      return null;
+    }
+
+    // Build metadata
+    const metadata = gistManager.buildMetadata(
+      'hooks',
+      [{ name: fileName, type: 'hooks', size: content.length }]
+    );
+
+    // Build description
+    const description = gistManager.buildGistDescription('hooks', 'Cursor Hooks Configuration');
+
+    // Create gist files object
+    const files: { [filename: string]: { content: string } } = {
+      [fileName]: { content },
+      '.cursortoys-metadata.json': { content: JSON.stringify(metadata, null, 2) }
+    };
+
+    // Create gist
+    vscode.window.showInformationMessage('Creating Gist for hooks...');
+    const gistUrl = await gistManager.createGist(files, description, isPublic);
+
+    return gistUrl;
+  } catch (error) {
+    vscode.window.showErrorMessage(`Error creating Gist for hooks: ${error}`);
     return null;
   }
 }
